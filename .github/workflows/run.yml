@@ -14,7 +14,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y imagemagick
           pip install --upgrade pip
-          # MoviePy와 Pillow의 특정 안정 버전을 설치하여 충돌을 방지합니다.
           pip install google-generativeai moviepy==1.0.3 Pillow==9.5.0
       - name: Configure ImageMagick
         run: |
@@ -22,8 +21,10 @@ jobs:
       - name: Run Script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python main.py
+        run: python main.py # 여기서 파일이 생성되어야 함
+      - name: Check for Output File
+        run: ls -l # 파일이 실제로 생성되었는지 로그로 확인
       - uses: actions/upload-artifact@v4
         with:
           name: reels-video
-          path: final_reels.mp4
+          path: ./final_reels.mp4 # 현재 폴더에 있는 파일을 업로드
