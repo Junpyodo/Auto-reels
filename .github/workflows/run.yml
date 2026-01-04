@@ -14,14 +14,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y imagemagick
           pip install --upgrade pip
-          # 신규 공식 SDK 설치
-          pip install google-genai moviepy==1.0.3 Pillow==9.5.0
+          # OpenRouter 연동을 위한 라이브러리
+          pip install openai moviepy==1.0.3 Pillow==9.5.0
       - name: Configure ImageMagick
         run: |
           sudo sed -i 's/rights="none" pattern="@\*"/rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml
       - name: Run Script
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # GitHub Secrets에 OPENROUTER_API_KEY를 등록해야 합니다
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: python main.py
       - name: Upload result
         uses: actions/upload-artifact@v4
