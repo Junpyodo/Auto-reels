@@ -1,89 +1,73 @@
 import os
 import random
-import datetime
 import google.generativeai as genai
 from google.cloud import texttospeech
 from moviepy.editor import VideoFileClip, TextClip, AudioFileClip, CompositeVideoClip
 
-# 1. 환경 설정 및 보안 키 연결
-# GitHub Secrets에 GEMINI_API_KEY라는 이름으로 키를 저장해야 합니다.
+# 보안 설정
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "google_key.json"
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 def run_reels_bot():
-    print("--- 작업 시작: 제미나이 모드 ---")
+    # 1. 판매 아이템 및 주제 설정
+    items = ["고함량 마카 영양제", "무자본 창업 공략집", "성공한 남자의 향수", "집중력 향상 뇌 영양제"]
+    topics = ["고대 철학자의 명언", "현대 성공의 법칙", "남성성의 본질", "패배자의 습관"]
     
-    # 2. 판매 타겟 아이템 리스트 (책, 영양제, 돈 버는 법)
-    items = [
-        "경제적 자유를 위한 필독서 '부의 추월차선'", 
-        "남자의 활력을 결정하는 고함량 마카 영양제", 
-        "퇴사 후 월 500 벌게 해주는 '무자본 창업 공략집'",
-        "집중력을 200% 끌어올리는 뇌 영양제",
-        "자면서도 돈이 들어오는 '파이프라인 구축' 비법"
-    ]
     item = random.choice(items)
+    topic = random.choice(topics)
     
-    # 3. Gemini를 이용한 카리스마 마케팅 문구 생성
+    # 2. 제미나이 미스터리 프롬프트
     model = genai.GenerativeModel('gemini-pro')
     prompt = f"""
-    당신은 100만 유튜버이자 천재 마케터입니다.
-    성공을 열망하는 남성들에게 {item}을 판매해야 합니다.
-    시청자의 뒤통수를 때리는 듯한 강력한 동기부여와 함께 80자 이내의 짧고 굵은 대본을 쓰세요.
-    말투는 매우 단호하고 카리스마 있어야 합니다.
-    마지막 문장은 반드시 '지금 프로필 링크를 확인해.'로 끝내세요.
+    당신은 신비롭고 압도적인 분위기의 철학적 마케터입니다.
+    오늘의 주제는 '{topic}'이며, 홍보할 물건은 '{item}'입니다.
+    
+    [작성 규칙]
+    1. 처음에는 인생의 본질을 꿰뚫는 무거운 문장으로 시작하세요.
+    2. 중간에 은연중에 '{item}'의 효능이나 가치를 언급하되, 직접적으로 이름을 말하지 마세요. 
+       대신 "그 비밀은 내 손끝에 있다" 혹은 "남모르게 삼키는 결단" 등으로 비유하세요.
+    3. 시청자가 "저게 대체 뭐길래?"라는 갈증을 느끼게 하세요.
+    4. 80자 이내로, 매우 낮고 느린 어조에 어울리는 문체로 작성하세요.
+    5. 마지막 문구는 "비밀은 프로필에 남겨두었다."로 고정하세요.
     """
     
-    try:
-        response = model.generate_content(prompt)
-        script = response.text
-        print(f"생성된 대본: {script}")
-    except Exception as e:
-        print(f"Gemini 생성 실패: {e}")
-        return
+    response = model.generate_content(prompt)
+    script = response.text
+    print(f"생성된 미스터리 대본: {script}")
 
-    # 4. Google Cloud TTS로 음성 생성 (남성 뉴스 읽기 톤)
+    # 3. 구글 TTS (가장 깊고 무거운 목소리 설정)
     tts_client = texttospeech.TextToSpeechClient()
     synthesis_input = texttospeech.SynthesisInput(text=script)
-    
     voice = texttospeech.VoiceSelectionParams(
         language_code="ko-KR", 
-        name="ko-KR-Neural2-C", # 신뢰감 있는 남성 목소리
+        name="ko-KR-Neural2-C", 
         ssml_gender=texttospeech.SsmlVoiceGender.MALE
     )
-    
+    # 속도를 늦추고(0.9) 톤을 낮춰서(-3.0) 무겁게 만듭니다
     audio_config = texttospeech.AudioConfig(
         audio_encoding=texttospeech.AudioEncoding.MP3,
-        pitch=-1.5, # 목소리 톤을 약간 낮춤
-        speaking_rate=1.05 # 약간 빠르게
+        pitch=-3.0, 
+        speaking_rate=0.9
     )
     
     res = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
-    
     with open("voice.mp3", "wb") as out:
         out.write(res.audio_content)
-    print("음성 생성 완료.")
 
-    # 5. 영상 합성 (MoviePy)
-    # 반드시 저장소 메인에 background.mp4 파일이 있어야 합니다.
-    bg_path = "background.mp4"
-    if not os.path.exists(bg_path):
-        print(f"에러: {bg_path} 파일이 없습니다. 영상을 업로드해주세요.")
-        return
-
-    video = VideoFileClip(bg_path).subclip(0, 10) # 10초 쇼츠
+    # 4. 영상 합성 (어두운 배경 처리)
+    video = VideoFileClip("background.mp4").subclip(0, 10)
+    # 영상을 어둡게 만들기 (밝기 0.5배)
+    video = video.fx(lambda v: v.multiply_speed(1)).margin(top=0, opacity=0).colorx(0.5)
+    
     audio = AudioFileClip("voice.mp3")
     video = video.set_audio(audio)
     
-    # 자막 설정 (화면 80% 너비, 중앙 배치)
-    txt = TextClip(script, fontsize=45, color='white', font='Liberation-Sans-Bold', 
-                   method='caption', size=(video.w*0.8, None))
-    txt = txt.set_duration(video.duration).set_pos('center')
+    # 자막: 폰트를 고급스럽게, 위치를 약간 아래로 조정
+    txt = TextClip(script, fontsize=35, color='gray80', font='Liberation-Sans-Bold', 
+                   method='caption', size=(video.w*0.7, None)).set_duration(video.duration).set_pos(('center', 'center'))
     
     final = CompositeVideoClip([video, txt])
-    
-    # 최종 파일 저장 (인스타그램 업로드용 libx264 코덱)
     final.write_videofile("final_reels.mp4", fps=24, codec="libx264", audio_codec="aac")
-    print("--- 모든 작업 완료: final_reels.mp4 생성됨 ---")
 
 if __name__ == "__main__":
     run_reels_bot()
