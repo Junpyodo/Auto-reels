@@ -5,37 +5,26 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y imagemagick
-          pip install --upgrade pip
-          pip install google-generativeai moviepy==1.0.3 Pillow==9.5.0
-
+          python -m pip install --upgrade pip
+          # 🌟 아래 한 줄이 핵심입니다. 충돌을 일으키는 패키지를 먼저 고칩니다.
+          pip install importlib-metadata google-generativeai moviepy==1.0.3 Pillow==9.5.0
       - name: Configure ImageMagick
         run: |
           sudo sed -i 's/rights="none" pattern="@\*"/rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml
-
       - name: Run Script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        # working-directory를 지정하여 파이썬이 파일을 찾는 위치를 고정합니다.
         run: python main.py
-        working-directory: ./
-
-      - name: Check File List
-        run: ls -R # 파일이 어디에 생성되었는지 전체 구조를 로그에 찍습니다.
-
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
           name: reels-video
-          path: final_reels.mp4 # 최상위에 생성된 파일을 업로드
+          path: final_reels.mp4
