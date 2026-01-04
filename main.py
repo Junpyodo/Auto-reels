@@ -7,16 +7,16 @@ from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 def run_reels_bot():
-    print("--- 다크 심리학 텍스트 릴스 모드 시작 ---")
+    print("--- 텍스트 전용 다크 심리학 모드 시작 ---")
     
-    # 2. 다크 심리학 및 성공 주제 추가
+    # 2. 다크 심리학 및 성공 주제 리스트
     items = ["High-purity Maca Supplement", "Deep Focus Nootropics", "The Elite Mindset PDF"]
     topics = [
         "Dark psychology to make her obsessed", # 여자가 끌리는 다크 심리학
         "The power of silence in attraction",    # 유혹에서의 침묵의 힘
         "Ancient Stoic Wisdom on Power",         # 권력에 대한 스토아 철학
         "Habits of the 1% Undefeated Men",       # 상위 1% 남자의 습관
-        "The mystery of a high-value man"        # 고가치 남성의 신비로움
+        "The cold truth about human nature"      # 인간 본성에 대한 차가운 진실
     ]
     
     item = random.choice(items)
@@ -26,45 +26,47 @@ def run_reels_bot():
     model = genai.GenerativeModel('gemini-pro')
     prompt = f"""
     Create a powerful, short 2-sentence quote about '{topic}'.
-    Make it sound mysterious, dark, and masculine. 
+    Tone: Authoritative, dark, and elite. 
     Use a psychological trigger that makes people curious about '{item}'.
-    Format:
-    [Sentence 1: A cold truth about life or attraction]
-    [Sentence 2: A subtle hint that the secret lies in your ritual]
+    - Sentence 1: A sharp, cold realization.
+    - Sentence 2: A hint that the true secret is hidden.
     Ending: "The secret is in the bio."
-    Maximum 120 characters total. No hashtags.
+    Total length: Max 120 characters. No hashtags or emojis.
     """
     
-    response = model.generate_content(prompt)
-    script = response.text.replace('"', '') # 따옴표 제거
-    print(f"생성된 스크립트: {script}")
+    try:
+        response = model.generate_content(prompt)
+        script = response.text.replace('"', '') # 불필요한 따옴표 제거
+        print(f"Generated Script: {script}")
+    except Exception as e:
+        print(f"Script Generation Failed: {e}")
+        return
 
     # 4. 영상 합성
-    # background.mp4는 이미 음악이 포함된 어두운 영상이어야 합니다.
+    # 업로드하신 background.mp4가 음악이 포함된 10초 내외 영상이어야 합니다.
     video = VideoFileClip("background.mp4").subclip(0, 10)
     
-    # 영상을 매우 어둡게 보정 (시각적 무게감)
+    # 영상을 매우 어둡게(밝기 30%) 보정하여 자막 집중도를 높임
     video = video.colorx(0.3) 
     
-    # 5. 강력한 폰트 및 자막 설정
-    # 'Liberation-Sans-Bold'는 대부분의 리눅스 서버에 기본 설치된 굵고 강한 폰트입니다.
-    # 더 화려한 폰트를 원하시면 아래 폰트 이름을 'Impact' 또는 'Arial-Bold'로 시도해 보세요.
+    # 5. 자막 설정 (강력하고 고급스러운 폰트 스타일)
+    # 'DejaVu-Sans-Bold'는 리눅스 서버에서 가장 안정적이고 굵은 폰트 중 하나입니다.
     txt = TextClip(script, 
-                   fontsize=40, 
+                   fontsize=45, 
                    color='white', 
-                   font='Liberation-Sans-Bold', 
+                   font='DejaVu-Sans-Bold', 
                    method='caption', 
                    align='center',
-                   size=(video.w*0.8, None),
-                   line_spacing=10)
+                   size=(video.w*0.85, None),
+                   line_spacing=12)
     
-    # 텍스트가 2초 동안 서서히 나타남 (Fade In)
-    txt = txt.set_duration(video.duration).set_pos('center').fadein(2)
+    # 전체 텍스트가 2.5초에 걸쳐 아주 천천히 나타나도록 설정 (Fade In)
+    txt = txt.set_duration(video.duration).set_pos('center').fadein(2.5)
     
     final = CompositeVideoClip([video, txt])
     
-    # 최종 결과물 저장
-    final.write_videofile("final_reels.mp4", fps=24, codec="libx264")
+    # 6. 최종 파일 저장
+    final.write_videofile("final_reels.mp4", fps=24, codec="libx264", audio_codec="aac")
     print("--- 제작 완료: final_reels.mp4 ---")
 
 if __name__ == "__main__":
