@@ -1,30 +1,37 @@
 name: Auto Reels Creator
+
 on:
-  schedule:
-    - cron: '0 0 * * *' # 매일 오전 9시(한국 시간) 자동 실행
-  workflow_dispatch: # 수동 실행 버튼
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      - name: Install System Libs
+
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y imagemagick ffmpeg
-          sudo sed -i 's/rights="none" pattern="PDF"/rights="read|write" pattern="PDF"/' /etc/ImageMagick-6/policy.xml
-      - name: Install Python Libs
-        run: pip install -r requirements.txt
-      - name: Run Main Script
+          sudo apt-get install -y imagemagick
+          python -m pip install --upgrade pip
+          pip install google-generativeai moviepy==1.0.3 Pillow
+
+      - name: Configure ImageMagick
+        run: |
+          sudo sed -i 's/policy domain="path" rights="none" pattern="@\*"/policy domain="path" rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml
+
+      - name: Run script
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }} # 이 부분이 GEMINI로 바뀌어야 합니다
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python main.py
-      - name: Save Video
+
+      - name: Upload result
         uses: actions/upload-artifact@v3
         with:
           name: daily-reels-video
