@@ -1,6 +1,7 @@
 import os
 from openai import OpenAI
 from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+import moviepy.video.fx.all as vfx # fx 효과를 위한 추가
 
 def get_best_free_script():
     client = OpenAI(
@@ -8,16 +9,11 @@ def get_best_free_script():
         api_key=os.getenv("OPENROUTER_API_KEY"),
     )
 
-    # 🌟 [2026년 기준] 성능 순위별 무료 모델 리스트
-    # 1. Gemini 1.5 Flash (가장 범용적이고 영리함)
-    # 2. Llama 3.3 70B Instruct (오픈소스 최강급 성능)
-    # 3. Qwen 2.5 72B (창의적이고 방대한 지식)
-    # 4. MiMo-V2-Flash (최신 무료 고성능 모델)
+    # 1순위 모델 이름을 더 정확한 명칭으로 수정했습니다.
     models = [
-        "google/gemini-flash-1.5-exp:free",
+        "google/gemini-flash-1.5-8b",
         "meta-llama/llama-3.3-70b-instruct:free",
-        "qwen/qwen-2.5-72b-instruct:free",
-        "xiaomi/mimo-v2-flash:free"
+        "qwen/qwen-2.5-72b-instruct:free"
     ]
 
     for model_name in models:
@@ -35,27 +31,25 @@ def get_best_free_script():
                 print(f"✅ 성공: {model_name}")
                 return script
         except Exception as e:
-            print(f"⚠️ {model_name} 실패 (할당량 초과 또는 에러): {e}")
+            print(f"⚠️ {model_name} 실패: {e}")
             continue
-            
     return None
 
 def run_reels_bot():
     script = get_best_free_script()
-    
     if not script:
-        print("❌ 모든 무료 모델의 할당량이 소진되었습니다. 잠시 후 다시 시도하세요.")
+        print("❌ 모든 모델 실패")
         return
 
     if not os.path.exists("background.mp4"):
-        print("❌ background.mp4 파일이 없습니다.")
+        print("❌ background.mp4 없음")
         return
 
     try:
         print(f"🎬 영상 제작 시작: {script}")
-        video = VideoFileClip("background.mp4").subclip(0, 5).colorx(0.3)
+        # 에러 수정: .colorx(0.3) 대신 .fx(vfx.colorx, 0.3) 사용
+        video = VideoFileClip("background.mp4").subclip(0, 5).fx(vfx.colorx, 0.3)
         
-        # 자막 설정
         txt = TextClip(script, fontsize=45, color='white', size=(video.w*0.8, None), 
                        font='DejaVu-Sans-Bold', method='caption', stroke_color='black', stroke_width=1).set_duration(5).set_pos('center')
         
