@@ -1,90 +1,71 @@
 import os
 import random
 import google.generativeai as genai
-from google.cloud import texttospeech
-from moviepy.editor import VideoFileClip, TextClip, AudioFileClip, CompositeVideoClip
+from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
 
-# 1. 환경 설정 및 보안 키 연결
-# GitHub Secrets에 GEMINI_API_KEY가 등록되어 있어야 하고, google_key.json 파일이 저장소에 있어야 합니다.
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "google_key.json"
+# 1. 제미나이 설정 (TTS 미사용으로 구글 키 설정 불필요)
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 def run_reels_bot():
-    print("--- 프로세스 시작: 영어 다크 모티베이션 모드 ---")
+    print("--- 다크 심리학 텍스트 릴스 모드 시작 ---")
     
-    # 2. 글로벌 타겟 아이템 및 주제 설정
-    items = ["High-purity Maca Supplement", "Zero-Capital Startup Guide", "Luxury Men's Fragrance", "Deep Focus Nootropics"]
-    topics = ["Ancient Stoic Wisdom", "Modern Laws of Success", "The Essence of Masculinity", "Habits of the 1%", "The Cost of Greatness"]
+    # 2. 다크 심리학 및 성공 주제 추가
+    items = ["High-purity Maca Supplement", "Deep Focus Nootropics", "The Elite Mindset PDF"]
+    topics = [
+        "Dark psychology to make her obsessed", # 여자가 끌리는 다크 심리학
+        "The power of silence in attraction",    # 유혹에서의 침묵의 힘
+        "Ancient Stoic Wisdom on Power",         # 권력에 대한 스토아 철학
+        "Habits of the 1% Undefeated Men",       # 상위 1% 남자의 습관
+        "The mystery of a high-value man"        # 고가치 남성의 신비로움
+    ]
     
     item = random.choice(items)
     topic = random.choice(topics)
     
-    # 3. 제미나이 AI 대본 생성 (미스터리 & 궁금증 유발)
+    # 3. 제미나이 대본 생성 (더 짧고 강렬하게)
     model = genai.GenerativeModel('gemini-pro')
-    
-    # 심리적 트리거와 신비로움을 강조한 영어 프롬프트
     prompt = f"""
-    Act as a mysterious, high-status philosophical marketer. 
-    Topic: {topic} / Hidden Product: {item}
-    
-    [Rules]
-    1. Start with a heavy, soul-piercing sentence about life and success.
-    2. Hint at the secret of '{item}' without naming it. Use metaphors like "the silent edge" or "the unseen ritual."
-    3. Make the audience feel a "void" that only this secret can fill.
-    4. Tone: Masculine, dark, authoritative, and slow.
-    5. Length: Maximum 250 characters.
-    6. Language: Powerful English.
-    7. Closing: Must end with "The secret is in the bio."
+    Create a powerful, short 2-sentence quote about '{topic}'.
+    Make it sound mysterious, dark, and masculine. 
+    Use a psychological trigger that makes people curious about '{item}'.
+    Format:
+    [Sentence 1: A cold truth about life or attraction]
+    [Sentence 2: A subtle hint that the secret lies in your ritual]
+    Ending: "The secret is in the bio."
+    Maximum 120 characters total. No hashtags.
     """
     
-    try:
-        response = model.generate_content(prompt)
-        script = response.text
-        print(f"생성된 영어 대본: {script}")
-    except Exception as e:
-        print(f"대본 생성 실패: {e}")
-        return
+    response = model.generate_content(prompt)
+    script = response.text.replace('"', '') # 따옴표 제거
+    print(f"생성된 스크립트: {script}")
 
-    # 4. 구글 클라우드 TTS (깊고 웅장한 영어 남성 목소리)
-    tts_client = texttospeech.TextToSpeechClient()
-    synthesis_input = texttospeech.SynthesisInput(text=script)
-    
-    # en-US-Neural2-J는 신뢰감 있고 깊은 저음의 미국 성인 남성 목소리입니다.
-    voice = texttospeech.VoiceSelectionParams(
-        language_code="en-US", 
-        name="en-US-Neural2-J", 
-        ssml_gender=texttospeech.SsmlVoiceGender.MALE
-    )
-    
-    # 피치(Pitch)를 낮추고 속도(Rate)를 늦춰서 무거운 분위기를 극대화합니다.
-    audio_config = texttospeech.AudioConfig(
-        audio_encoding=texttospeech.AudioEncoding.MP3,
-        pitch=-4.0, 
-        speaking_rate=0.85
-    )
-    
-    res = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
-    with open("voice.mp3", "wb") as out:
-        out.write(res.audio_content)
-
-    # 5. MoviePy를 이용한 영상 편집
-    # 영상을 어둡게(밝기 40% 수준) 보정하여 묵직한 느낌을 줍니다.
+    # 4. 영상 합성
+    # background.mp4는 이미 음악이 포함된 어두운 영상이어야 합니다.
     video = VideoFileClip("background.mp4").subclip(0, 10)
-    video = video.fx(lambda v: v.multiply_speed(1)).colorx(0.4) 
     
-    audio = AudioFileClip("voice.mp3")
-    video = video.set_audio(audio)
+    # 영상을 매우 어둡게 보정 (시각적 무게감)
+    video = video.colorx(0.3) 
     
-    # 미니멀한 자막 설정: 회색빛 흰색, 중앙 배치
-    txt = TextClip(script, fontsize=30, color='gray90', font='Liberation-Sans-Bold', 
-                   method='caption', size=(video.w*0.75, None))
-    txt = txt.set_duration(video.duration).set_pos(('center', 'center'))
+    # 5. 강력한 폰트 및 자막 설정
+    # 'Liberation-Sans-Bold'는 대부분의 리눅스 서버에 기본 설치된 굵고 강한 폰트입니다.
+    # 더 화려한 폰트를 원하시면 아래 폰트 이름을 'Impact' 또는 'Arial-Bold'로 시도해 보세요.
+    txt = TextClip(script, 
+                   fontsize=40, 
+                   color='white', 
+                   font='Liberation-Sans-Bold', 
+                   method='caption', 
+                   align='center',
+                   size=(video.w*0.8, None),
+                   line_spacing=10)
+    
+    # 텍스트가 2초 동안 서서히 나타남 (Fade In)
+    txt = txt.set_duration(video.duration).set_pos('center').fadein(2)
     
     final = CompositeVideoClip([video, txt])
     
-    # 인스타그램 최적화 코덱으로 저장
-    final.write_videofile("final_reels.mp4", fps=24, codec="libx264", audio_codec="aac")
-    print("--- 영상 제작 성공: final_reels.mp4 생성 완료 ---")
+    # 최종 결과물 저장
+    final.write_videofile("final_reels.mp4", fps=24, codec="libx264")
+    print("--- 제작 완료: final_reels.mp4 ---")
 
 if __name__ == "__main__":
     run_reels_bot()
