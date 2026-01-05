@@ -1,6 +1,12 @@
 name: Auto Reels Creator
 on:
-  workflow_dispatch:
+  schedule:
+    # 한국 시간(KST) 오전 9시 (UTC 00:00)
+    - cron: '0 0 * * *'
+    # 한국 시간(KST) 오후 9시 (UTC 12:00)
+    - cron: '0 12 * * *'
+  workflow_dispatch: # 수동 버튼 유지
+
 jobs:
   build:
     runs-on: ubuntu-latest
