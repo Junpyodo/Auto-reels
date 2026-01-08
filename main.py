@@ -1,114 +1,117 @@
 import os
-import random  # 주제 랜덤 선택을 위해 추가
+import random
 from openai import OpenAI
 from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
 import moviepy.video.fx.all as vfx
 
 def get_best_sales_script():
-    """
-    마케팅 심리학 및 무작위성 로직을 적용하여 매번 다른 세일즈 대본 생성
-    """
     client = OpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=os.getenv("OPENROUTER_API_KEY"),
     )
 
-    # 1. 중복 방지를 위한 랜덤 주제 리스트
+    # 기존 심리학 주제 + 새로운 리스트형/습관 주제 통합
     topics = [
-        "Dark psychology of wealth",
-        "The 1% secret morning routine",
-        "Why 99% of people stay poor",
-        "Elite mindset vs Employee mindset",
-        "The forbidden rules of money",
-        "Social engineering for success",
-        "Stoic approach to financial freedom",
-        "The psychological cost of being average"
+        # --- 기존 심리학/전략 테마 ---
+        "Dark psychology of wealth and power",
+        "Hidden psychological advantages of the 1%",
+        "The stoic approach to financial dominance",
+        "Social engineering secrets for success",
+        "The forbidden rules of money mindset",
+        "Why 99% of people stay trapped in the rat race",
+        # --- 새로운 리스트/습관/체크리스트 테마 ---
+        "3 Habits of Self-Made Millionaires you can start today",
+        "The 'Poor vs Rich' Morning Routine comparison",
+        "Stop Doing These 3 Things to attract wealth",
+        "The 1% Wealth Checklist: Do you have these?",
+        "How to Reprogram Your Mind for ultimate success",
+        "What schools never taught you about making money",
+        "3 Psychological Triggers that make people say YES",
+        "The brutal truth about financial freedom"
     ]
     selected_topic = random.choice(topics)
 
-    # 모델 리스트
     models = [
         "openai/gpt-4o-mini", 
         "google/gemini-2.0-flash-exp:free",
         "meta-llama/llama-3.3-70b-instruct:free"
     ]
 
-    # 세일즈 문구 생성을 위한 고도화된 프롬프트
+    # 에러 방지를 위해 '딱 1개 세트'와 '단어 수 제한'을 엄격히 적용
     prompt_content = f"""
     Topic: {selected_topic}
-    Create a powerful, 3-part psychological sales script for an Instagram Reel. 
-    The goal is to trigger intense curiosity for a 'Success Secret' link in my bio.
+    Create ONE powerful 3-line psychological script for an Instagram Reel. 
+    Make the viewer desperate to click the link in my bio for the full solution.
 
     Structure:
-    1. Hook: A shocking truth about wealth or why most people are stuck.
-    2. Insight: A hidden psychological edge that the elite use.
-    3. Call to Action: Tell them to grab the 'Secret Blueprint' in my bio link.
+    Line 1 (Hook): A shocking truth, a list, or a bold claim.
+    Line 2 (Insight): A high-value tip or secret the elite use.
+    Line 3 (CTA): Direct them to the 'Secret Blueprint' or 'Guide' in my bio link.
 
-    Style Guidelines:
-    - Tone: Authoritative, Dark, and Urgent.
-    - Format: Use newlines (\\n) between each part. 
-    - Originality: DO NOT use clichés. Be provocative.
-    - Max 25 words total.
+    Constraints:
+    - Language: English.
+    - Format: Separate each line with a newline (\\n).
+    - MAX 25 WORDS total. (Very important to avoid rendering errors)
+    - Tone: Dark, Elite, Authoritative.
+    - No intro/outro like "Here is your script".
     """
 
     for model_name in models:
         try:
-            print(f"[{model_name}] '{selected_topic}' 주제로 대본 생성 중...")
+            print(f"[{model_name}] '{selected_topic}' 주제로 생성 중...")
             response = client.chat.completions.create(
                 model=model_name,
                 messages=[
-                    {"role": "system", "content": "You are a master of psychological copywriting. You never repeat the same advice twice."},
+                    {"role": "system", "content": "You are a master of high-conversion sales copy. You never repeat yourself."},
                     {"role": "user", "content": prompt_content}
                 ],
-                temperature=0.9,  # 창의성 수치를 높여 중복 방지 (0.0~1.0)
+                temperature=0.9, 
                 timeout=30
             )
             script = response.choices[0].message.content.strip()
             if script:
                 script = script.replace('"', '')
-                print(f"✅ 대본 생성 성공 ({model_name})")
-                return script
+                # 안전장치: 3줄까지만 자르기
+                lines = [l for l in script.split('\n') if l.strip()][:3]
+                final_script = "\n".join(lines)
+                print(f"✅ 대본 생성 성공")
+                return final_script
         except Exception as e:
-            print(f"⚠️ {model_name} 시도 중 에러: {e}")
+            print(f"⚠️ {model_name} 에러: {e}")
             continue
     return None
 
 def run_reels_bot():
     script = get_best_sales_script()
-    if not script:
-        print("❌ 대본 생성 실패")
-        return
+    if not script: return
 
     if not os.path.exists("background.mp4"):
-        print("❌ background.mp4 파일 없음")
+        print("❌ background.mp4 파일이 없습니다.")
         return
 
     try:
         print(f"🎬 영상 제작 시작:\n{script}")
         
-        # 1. 배경 영상 로드 (8초)
+        # 배경 영상 8초 사용
         video = VideoFileClip("background.mp4").subclip(0, 8).fx(vfx.colorx, 0.25)
         
-        # 2. 자막 설정 (줄바꿈 반영 및 중앙 정렬)
+        # 자막 설정 (폰트 크기와 줄간격 최적화)
         txt = TextClip(
             script, 
-            fontsize=50,
+            fontsize=45, 
             color='white', 
-            size=(video.w * 0.9, None), 
+            size=(video.w * 0.85, None), 
             font='DejaVu-Sans-Bold', 
             method='caption', 
             align='center',
-            interline=15,
+            interline=12,
             stroke_color='black', 
-            stroke_width=2
+            stroke_width=1.5
         ).set_duration(8).set_pos('center')
         
-        # 3. 영상 합성 및 출력
         final = CompositeVideoClip([video, txt])
-        output_name = "final_reels.mp4"
-        final.write_videofile(output_name, fps=24, codec="libx264", audio=False)
-        
-        print(f"--- ★ 제작 완료: {output_name} ★ ---")
+        final.write_videofile("final_reels.mp4", fps=24, codec="libx264", audio=False)
+        print("--- ★ 통합 주제 영상 제작 완료! ★ ---")
         
     except Exception as e:
         print(f"❌ 영상 편집 에러: {e}")
