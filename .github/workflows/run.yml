@@ -5,33 +5,42 @@ on:
     - cron: '0 0 * * *'
     # 한국 시간(KST) 오후 9시 (UTC 12:00)
     - cron: '0 12 * * *'
-  workflow_dispatch: # 수동 버튼 유지
+  workflow_dispatch: # 수동 실행 버튼
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Install Dependencies
+
+      - name: Install System Dependencies (ImageMagick)
         run: |
           sudo apt-get update
           sudo apt-get install -y imagemagick
-          pip install --upgrade pip
-          # OpenRouter 연동을 위한 라이브러리
-          pip install openai moviepy==1.0.3 Pillow==9.5.0
-      - name: Configure ImageMagick
+          # 자막 생성을 막는 ImageMagick 보안 정책을 강제로 해제합니다.
+          sudo sed -i 's/domain="path" rights="none" pattern="@\*"/domain="path" rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml
+
+      - name: Install Python Dependencies
         run: |
-          sudo sed -i 's/rights="none" pattern="@\*"/rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml
-      - name: Run Script
+          python -m pip install --upgrade pip
+          # moviepy와 Pillow 버전을 명시하여 충돌을 방지합니다.
+          pip install openai moviepy==1.0.3 Pillow==9.5.0 requests
+
+      - name: Run Reels Script
         env:
-          # GitHub Secrets에 OPENROUTER_API_KEY를 등록해야 합니다
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: python main.py
-      - name: Upload result
+
+      - name: Upload Video Artifact
+        if: success() # 성공했을 때만 결과물 저장
         uses: actions/upload-artifact@v4
         with:
           name: reels-video
           path: final_reels.mp4
+          retention-days: 7 # 결과물을 7일 동안 보관
