@@ -8,9 +8,14 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -24,9 +29,7 @@ jobs:
 
       - name: Configure ImageMagick Policy
         run: |
-          # 모든 제한(width, height, memory 등)을 완전히 푸는 가장 강력한 설정입니다.
           sudo sed -i 's/rights="none" pattern="@\*"/rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml
-          # 추가로 텍스트 렌더링 제한을 유발하는 특정 라인들을 주석 처리하거나 수정합니다.
           sudo sed -i '/policy domain="resource" name="map" value="512MiB"/d' /etc/ImageMagick-6/policy.xml
           sudo sed -i '/policy domain="resource" name="width" value="16KP"/d' /etc/ImageMagick-6/policy.xml
           sudo sed -i '/policy domain="resource" name="height" value="16KP"/d' /etc/ImageMagick-6/policy.xml
@@ -41,8 +44,17 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: python main.py
 
+      - name: Commit and Push Changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          if [ -f topics.txt ]; then
+            git add topics.txt
+            git diff --quiet && git diff --staged --quiet || (git commit -m "🔄 주제 리스트 업데이트 (자동)" && git push)
+          fi
+
       - name: Upload Video Artifact
-        if: always() # 실패하더라도 로그 확인을 위해 시도
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: reels-video
