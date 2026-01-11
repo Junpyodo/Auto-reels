@@ -50,10 +50,10 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          if [ -f topics.txt ]; then
-            git add topics.txt
-            git diff --quiet && git diff --staged --quiet || (git commit -m "🔄 주제 리스트 업데이트 (자동)" && git push)
-          fi
+          # 변경된 두 파일을 모두 스테이징에 추가합니다.
+          git add topics.txt emergency_scripts.txt
+          # 변경 사항이 있을 때만 커밋하고 푸시합니다.
+          git diff --quiet && git diff --staged --quiet || (git commit -m "🔄 주제 및 비상 대본 리스트 업데이트" && git push)
 
       - name: Upload Video Artifact
         if: always()
