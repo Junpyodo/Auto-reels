@@ -8,8 +8,8 @@ from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
 import moviepy.video.fx.all as vfx
 
 # --- [필수 설정 항목] ---
-GITHUB_ID = "Junpyodo"        # 스크린샷에 나온 아이디로 설정함
-REPO_NAME = "Auto-reels"      # 스크린샷에 나온 저장소 이름으로 설정함
+GITHUB_ID = "Junpyodo"        
+REPO_NAME = "Auto-reels"      
 # -----------------------
 
 TOPIC_FILE = "topics.txt"
@@ -20,7 +20,6 @@ ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID")
 HASHTAGS = "#wealth #success #darkpsychology #motivation #millionaire #mindset"
 MENTIONS = "@instagram"
 
-# 모델 리스트 최적화 (Gemini 위주로 안정화)
 AI_MODELS = [
     "google/gemini-2.0-flash-exp:free",
     "google/gemini-flash-1.5-8b:free",
@@ -28,82 +27,102 @@ AI_MODELS = [
     "meta-llama/llama-3.1-8b-instruct:free"
 ]
 
+def get_list_from_file(file_path, default_values):
+    if not os.path.exists(file_path):
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(default_values))
+        return default_values
+    with open(file_path, "r", encoding="utf-8") as f:
+        return [line.strip() for line in f.readlines() if line.strip()]
+
+def update_emergency_scripts(used_script=None):
+    scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence.", "Success is the best revenge."])
+    if used_script and used_script in scripts:
+        scripts.remove(used_script)
+    print("🔄 AI가 비상용 대본 리스트를 보충 중입니다...")
+    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
+    prompt = "Generate 10 powerful, viral 20-word dark psychology scripts for Instagram Reels. One per line. No numbers."
+    for model in AI_MODELS:
+        try:
+            time.sleep(2)
+            response = client.chat.completions.create(model=model, messages=[{"role": "user", "content": prompt}])
+            new_list = [line.strip().replace('"', '') for line in response.choices[0].message.content.strip().split('\n') if line.strip()]
+            if new_list:
+                final_scripts = list(set(scripts + new_list))
+                with open(EMERGENCY_FILE, "w", encoding="utf-8") as f:
+                    f.write("\n".join(final_scripts))
+                print(f"✅ 비상 대본 업데이트 완료 ({model})")
+                return
+        except: continue
+
+def update_topics_list(used_topic):
+    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
+    topics = get_list_from_file(TOPIC_FILE, ["Wealth psychology"])
+    if used_topic in topics: topics.remove(used_topic)
+    print("🔄 AI가 새로운 주제 리스트를 생성 중입니다...")
+    prompt = f"Based on {used_topic}, generate 10 new Instagram Reel topics about dark psychology and wealth. Newlines only."
+    for model in AI_MODELS:
+        try:
+            response = client.chat.completions.create(model=model, messages=[{"role": "user", "content": prompt}])
+            new_topics = [line.strip() for line in response.choices[0].message.content.strip().split('\n') if line.strip()]
+            if new_topics:
+                with open(TOPIC_FILE, "w", encoding="utf-8") as f:
+                    f.write("\n".join(list(set(topics + new_topics))))
+                print(f"✅ 주제 리스트 업데이트 완료 ({model})")
+                return
+        except: continue
+
+def get_best_sales_script(selected_topic):
+    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
+    prompt_content = f"Topic: {selected_topic}\nCreate a powerful 20-word dark psychology script for an Instagram Reel. No intro."
+    for model in AI_MODELS:
+        try:
+            time.sleep(5)
+            response = client.chat.completions.create(
+                model=model, 
+                messages=[{"role": "user", "content": prompt_content}],
+                extra_headers={"HTTP-Referer": "https://github.com"}
+            )
+            script = response.choices[0].message.content.strip().replace('"', '')
+            if script: return script, False
+        except: continue
+    e_scripts = get_list_from_file(EMERGENCY_FILE, ["The 1% don't sleep until the job is done."])
+    return random.choice(e_scripts), True
+
 def post_to_instagram(video_url, caption):
-    """최신 인스타그램 릴스 업로드 방식 (v19.0) 적용"""
+    """최신 인스타그램 릴스 업로드 방식 강제 적용"""
     print(f"📤 인스타그램 릴스 업로드 시도 중... \n🔗 URL: {video_url}")
-    
-    # 1. 미디어 컨테이너 생성 (REELS 전용 파라미터 적용)
     post_url = f"https://graph.facebook.com/v19.0/{ACCOUNT_ID}/media"
+    
+    # 🔥 중요한 변화: 'REELS' 미디어 타입과 'caption'만 정확히 전달
     payload = {
-        'media_type': 'REELS', # 반드시 REELS로 명시
+        'media_type': 'REELS',
         'video_url': video_url,
         'caption': caption,
-        'share_to_feed': 'true', # 피드에도 공유
         'access_token': ACCESS_TOKEN
     }
     
     try:
         r = requests.post(post_url, data=payload)
         res = r.json()
-        
         if 'id' in res:
             creation_id = res['id']
-            print(f"✅ 미디어 컨테이너 생성 성공! (ID: {creation_id})")
-            
-            # 2. 인스타그램 서버 처리 대기 (릴스는 용량이 커서 3분 권장)
-            print("⏳ 인스타그램 서버에서 영상 처리 중... 3분간 대기합니다.")
+            print(f"✅ 컨테이너 생성 성공! (ID: {creation_id}) \n⏳ 처리 대기 중 (3분)...")
             time.sleep(180) 
             
-            # 3. 최종 게시물 발행
             publish_url = f"https://graph.facebook.com/v19.0/{ACCOUNT_ID}/media_publish"
-            publish_payload = {
-                'creation_id': creation_id,
-                'access_token': ACCESS_TOKEN
-            }
-            r_pub = requests.post(publish_url, data=publish_payload)
+            r_pub = requests.post(publish_url, data={'creation_id': creation_id, 'access_token': ACCESS_TOKEN})
             if 'id' in r_pub.json():
-                print("🎉 🎉 인스타그램 릴스 최종 업로드 성공! 🎉 🎉")
+                print("🎉 릴스 업로드 성공!")
             else:
                 print(f"❌ 최종 발행 실패: {r_pub.text}")
         else:
-            # 💡 여기서 에러가 나면 권한 문제일 가능성이 높음
             print(f"❌ 컨테이너 생성 실패: {res}")
-            if 'deprecated' in str(res):
-                print("💡 팁: 페이스북 앱 설정에서 'Instagram Graph API'가 최신 버전인지 확인하세요.")
-                
     except Exception as e:
-        print(f"❌ API 요청 에러: {e}")
-
-def get_best_sales_script(selected_topic):
-    """OpenRouter 에러 방지를 위한 딜레이 보강"""
-    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
-    prompt_content = f"Topic: {selected_topic}\nCreate a 20-word dark psychology script for Instagram. No intro."
-    
-    for model in AI_MODELS:
-        try:
-            print(f"🤖 {model} 모델에게 대본 요청 중...")
-            time.sleep(5) # 429 에러 방지를 위해 대기 시간 늘림
-            response = client.chat.completions.create(
-                model=model, 
-                messages=[{"role": "user", "content": prompt_content}],
-                extra_headers={"HTTP-Referer": "https://github.com", "X-Title": "Auto Reels"} # 필수 헤더 추가
-            )
-            script = response.choices[0].message.content.strip().replace('"', '')
-            if script:
-                return script, False
-        except Exception as e:
-            print(f"⚠️ {model} 실패: {e}")
-            continue
-    
-    print("🆘 모든 AI 응답 없음. 비상 대본을 사용합니다.")
-    e_scripts = get_list_from_file(EMERGENCY_FILE, ["Success is the only option."])
-    return random.choice(e_scripts), True
-
-# (get_list_from_file, update_emergency_scripts, update_topics_list 등 기존 로직 유지)
-# ... [나머지 함수들은 이전과 동일] ...
+        print(f"❌ API 에러: {e}")
 
 def run_reels_bot():
-    topics = get_list_from_file(TOPIC_FILE, ["Dark psychology of wealth"])
+    topics = get_list_from_file(TOPIC_FILE, ["Dark psychology of wealth and power"])
     selected_topic = random.choice(topics)
     print(f"🎯 주제: {selected_topic}")
     
@@ -122,26 +141,16 @@ def run_reels_bot():
         final_video_name = "reels_video.mp4"
         final.write_videofile(final_video_name, fps=24, codec="libx264", audio=False)
         
-        # 🔗 GitHub Pages URL (이미 로그에서 성공한 주소 형식 적용)
         public_url = f"https://{GITHUB_ID}.github.io/{REPO_NAME}/{final_video_name}"
-        
-        # 🚀 업로드 실행
         post_to_instagram(public_url, final_caption)
         
-        # 데이터 업데이트
         if is_emergency: update_emergency_scripts(script)
-        else: update_topics_list(selected_topic)
-
+        else:
+            update_topics_list(selected_topic)
+            update_emergency_scripts()
+            
     except Exception as e:
         print(f"❌ 작업 에러: {e}")
 
 if __name__ == "__main__":
-    # 필수 함수들 누락 방지 (복사 시 주의)
-    def get_list_from_file(p, d):
-        if not os.path.exists(p):
-            with open(p, "w", encoding="utf-8") as f: f.write("\n".join(d))
-            return d
-        with open(p, "r", encoding="utf-8") as f: return [l.strip() for l in f.readlines() if l.strip()]
-    
-    # 여기에 나머지 update_... 함수들 생략 없이 포함하여 실행
     run_reels_bot()
