@@ -7,21 +7,23 @@ from openai import OpenAI
 from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
 import moviepy.video.fx.all as vfx
 
+# --- [필수 설정 항목] ---
+GITHUB_ID = "Junpyodo"        # 본인의 GitHub 아이디로 변경하세요
+REPO_NAME = "Auto-reels"        # 본인의 저장소(Repo) 이름으로 변경하세요
+# -----------------------
+
 # 파일 경로 및 환경 변수 설정
 TOPIC_FILE = "topics.txt"
 EMERGENCY_FILE = "emergency_scripts.txt"
 ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
 ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID")
 
-# --- [수정 구간] 해시태그 및 언급할 계정 설정 ---
 HASHTAGS = """
 #wealth #success #darkpsychology #motivation #millionaire 
 #entrepreneur #luxurylifestyle #mindset #discipline
 """
 MENTIONS = "@instagram @millionaire_mentor @successmindset @richkids"
-# ----------------------------------------------
 
-# 🚀 [성능/안정성 순서] AI 모델 리스트
 AI_MODELS = [
     "google/gemini-2.0-flash-exp:free",
     "google/gemini-flash-1.5-8b:free",
@@ -31,9 +33,8 @@ AI_MODELS = [
 
 def post_to_instagram(video_url, caption):
     """인스타그램 Graph API를 사용하여 업로드 요청"""
-    print(f"📤 인스타그램 서버에 영상 전달 중... URL: {video_url}")
+    print(f"📤 인스타그램 서버에 영상 주소 전달 중... \n🔗 URL: {video_url}")
     
-    # 1. 미디어 컨테이너 생성
     post_url = f"https://graph.facebook.com/v19.0/{ACCOUNT_ID}/media"
     payload = {
         'media_type': 'REELS',
@@ -50,11 +51,10 @@ def post_to_instagram(video_url, caption):
             creation_id = res['id']
             print(f"✅ 컨테이너 생성 완료 (ID: {creation_id})")
             
-            # 2. 인스타그램 서버가 영상을 처리할 시간 대기 (최소 2분)
-            print("⏳ 인스타그램 서버에서 영상 처리 중... 약 2분 대기합니다.")
-            time.sleep(120) 
+            # GitHub Pages에 파일이 반영되고 인스타그램이 다운로드할 시간 확보 (중요)
+            print("⏳ 인스타그램 서버에서 영상 처리 중... 3분 대기합니다.")
+            time.sleep(180) 
             
-            # 3. 최종 게시물 발행
             publish_url = f"https://graph.facebook.com/v19.0/{ACCOUNT_ID}/media_publish"
             publish_payload = {
                 'creation_id': creation_id,
@@ -155,7 +155,7 @@ def run_reels_bot():
         return
 
     try:
-        # 영상 편집 단계
+        # 🎥 영상 편집 단계 (파일명 고정하여 주소 일정하게 유지)
         video = VideoFileClip("background.mp4").subclip(0, 8).fx(vfx.colorx, 0.25)
         txt = TextClip(
             script, fontsize=45, color='white', size=(video.w * 0.85, None),
@@ -164,40 +164,15 @@ def run_reels_bot():
         ).set_duration(8).set_pos('center')
         
         final = CompositeVideoClip([video, txt])
-        final_video_path = "final_reels.mp4"
-        final.write_videofile(final_video_path, fps=24, codec="libx264", audio=False)
+        final_video_name = "reels_video.mp4"
+        final.write_videofile(final_video_name, fps=24, codec="libx264", audio=False)
         
-        print(f"--- ★ 제작 완료 ★ ---")
+        print(f"--- ★ 제작 완료: {final_video_name} ★ ---")
 
-        # 🚀 [업로드 단계] 멀티 서버를 활용한 임시 URL 생성
-        public_url = None
-        
-        # 시도 1: 0x0.st
-        try:
-            print("🔗 임시 URL 생성 시도 1 (0x0.st)...")
-            with open(final_video_path, 'rb') as f:
-                r_file = requests.post("https://0x0.st", files={'file': f}, timeout=30)
-                if r_file.status_code == 200:
-                    public_url = r_file.text.strip()
-        except Exception as e:
-            print(f"⚠️ 0x0.st 시도 실패: {e}")
-
-        # 시도 2: file.io (첫 번째 서버 실패 시)
-        if not public_url:
-            try:
-                print("🔗 임시 URL 생성 시도 2 (file.io)...")
-                with open(final_video_path, 'rb') as f:
-                    r_file = requests.post("https://file.io", files={'file': f}, timeout=30)
-                    if r_file.status_code == 200:
-                        public_url = r_file.json().get('link')
-            except Exception as e:
-                print(f"⚠️ file.io 시도 실패: {e}")
-
-        # 최종 업로드 실행
-        if public_url:
-            post_to_instagram(public_url, final_caption)
-        else:
-            print("❌ 모든 임시 URL 생성 서버가 응답하지 않습니다. 업로드를 건너뜁니다.")
+        # 🚀 [업로드 단계] 본인의 GitHub Pages URL 생성
+        # GitHub Actions의 Commit/Push 이후 이 주소가 활성화됩니다.
+        public_url = f"https://{GITHUB_ID}.github.io/{REPO_NAME}/{final_video_name}"
+        post_to_instagram(public_url, final_caption)
         
         # 사용한 데이터 업데이트
         if is_emergency:
