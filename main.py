@@ -9,7 +9,7 @@ import moviepy.video.fx.all as vfx
 
 # 파일 경로 및 환경 변수 설정
 TOPIC_FILE = "topics.txt"
-EMERGENCY_FILE = "emergency_scripts.txt" # 비상 대본 저장 파일
+EMERGENCY_FILE = "emergency_scripts.txt"
 ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
 ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID")
 
@@ -29,8 +29,48 @@ AI_MODELS = [
     "meta-llama/llama-3.1-8b-instruct:free"
 ]
 
+def post_to_instagram(video_url, caption):
+    """인스타그램 Graph API를 사용하여 업로드 요청"""
+    print(f"📤 인스타그램 서버에 영상 전달 중... URL: {video_url}")
+    
+    # 1. 미디어 컨테이너 생성
+    post_url = f"https://graph.facebook.com/v19.0/{ACCOUNT_ID}/media"
+    payload = {
+        'media_type': 'REELS',
+        'video_url': video_url,
+        'caption': caption,
+        'access_token': ACCESS_TOKEN
+    }
+    
+    try:
+        r = requests.post(post_url, data=payload)
+        res = r.json()
+        
+        if 'id' in res:
+            creation_id = res['id']
+            print(f"✅ 컨테이너 생성 완료 (ID: {creation_id})")
+            
+            # 2. 인스타그램 서버가 영상을 처리할 시간 대기 (최소 2분)
+            print("⏳ 인스타그램 서버에서 영상 처리 중... 약 2분 대기합니다.")
+            time.sleep(120) 
+            
+            # 3. 최종 게시물 발행
+            publish_url = f"https://graph.facebook.com/v19.0/{ACCOUNT_ID}/media_publish"
+            publish_payload = {
+                'creation_id': creation_id,
+                'access_token': ACCESS_TOKEN
+            }
+            r_pub = requests.post(publish_url, data=publish_payload)
+            if 'id' in r_pub.json():
+                print("🎉 인스타그램 업로드 최종 성공!")
+            else:
+                print(f"❌ 최종 발행 실패: {r_pub.text}")
+        else:
+            print(f"❌ 컨테이너 생성 실패: {res}")
+    except Exception as e:
+        print(f"❌ API 요청 중 에러 발생: {e}")
+
 def get_list_from_file(file_path, default_values):
-    """파일에서 리스트를 읽어오고, 파일이 없으면 기본값으로 생성"""
     if not os.path.exists(file_path):
         with open(file_path, "w", encoding="utf-8") as f:
             f.write("\n".join(default_values))
@@ -39,7 +79,6 @@ def get_list_from_file(file_path, default_values):
         return [line.strip() for line in f.readlines() if line.strip()]
 
 def update_emergency_scripts(used_script=None):
-    """비상 대본 파일에서 사용한 것을 지우고 AI에게 새 목록을 받아 보충"""
     scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence.", "Success is the best revenge."])
     if used_script and used_script in scripts:
         scripts.remove(used_script)
@@ -62,25 +101,22 @@ def update_emergency_scripts(used_script=None):
         except: continue
 
 def get_best_sales_script(selected_topic):
-    """AI 대본 생성 시도, 실패 시 비상 대본 파일에서 추출"""
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
     prompt_content = f"Topic: {selected_topic}\nCreate a powerful 20-word dark psychology script for an Instagram Reel. No intro."
     
-    # 1. AI 모델 순차 시도
     for model in AI_MODELS:
-        for attempt in range(2): # 모델당 2번 시도
+        for attempt in range(2):
             try:
                 time.sleep(2)
                 response = client.chat.completions.create(model=model, messages=[{"role": "user", "content": prompt_content}])
                 script = response.choices[0].message.content.strip().replace('"', '')
                 if script:
                     print(f"✅ AI 대본 생성 성공 (모델: {model})")
-                    return script, False # (대본, 비상여부)
+                    return script, False
             except:
                 time.sleep(3)
                 continue
     
-    # 2. 모든 AI 실패 시 파일에서 비상 대본 사용
     print("🆘 모든 AI 응답 없음. 비상 대본 파일에서 추출합니다.")
     e_scripts = get_list_from_file(EMERGENCY_FILE, ["The 1% don't sleep until the job is done."])
     chosen_e = random.choice(e_scripts)
@@ -99,8 +135,9 @@ def update_topics_list(used_topic):
             response = client.chat.completions.create(model=model, messages=[{"role": "user", "content": prompt}])
             new_topics = [line.strip() for line in response.choices[0].message.content.strip().split('\n') if line.strip()]
             if new_topics:
+                final_list = list(set(topics + new_topics))
                 with open(TOPIC_FILE, "w", encoding="utf-8") as f:
-                    f.write("\n".join(list(set(topics + new_topics))))
+                    f.write("\n".join(final_list))
                 print(f"✅ 주제 리스트 업데이트 완료 ({model})")
                 return
         except: continue
@@ -118,6 +155,7 @@ def run_reels_bot():
         return
 
     try:
+        # 영상 편집 단계
         video = VideoFileClip("background.mp4").subclip(0, 8).fx(vfx.colorx, 0.25)
         txt = TextClip(
             script, fontsize=45, color='white', size=(video.w * 0.85, None),
@@ -126,16 +164,28 @@ def run_reels_bot():
         ).set_duration(8).set_pos('center')
         
         final = CompositeVideoClip([video, txt])
-        final.write_videofile("final_reels.mp4", fps=24, codec="libx264", audio=False)
+        final_video_path = "final_reels.mp4"
+        final.write_videofile(final_video_path, fps=24, codec="libx264", audio=False)
         
         print(f"--- ★ 제작 완료 ★ ---")
+
+        # 🚀 [업로드 단계] 임시 서버를 통해 인스타그램에 주소 전달
+        with open(final_video_path, 'rb') as f:
+            print("🔗 임시 영상 URL 생성 중...")
+            # 0x0.st 서비스를 이용하여 인스타그램이 접근 가능한 URL을 만듭니다.
+            r_file = requests.post("https://0x0.st", files={'file': f})
+            if r_file.status_code == 200:
+                public_url = r_file.text.strip()
+                post_to_instagram(public_url, final_caption)
+            else:
+                print("❌ 임시 URL 생성 실패. 업로드를 건너뜁니다.")
         
         # 사용한 데이터 업데이트
         if is_emergency:
-            update_emergency_scripts(script) # 사용한 비상 대본 삭제 및 보충
+            update_emergency_scripts(script)
         else:
-            update_topics_list(selected_topic) # 일반 주제 업데이트
-            update_emergency_scripts() # (선택사항) 평소에도 비상 대본 보충
+            update_topics_list(selected_topic)
+            update_emergency_scripts()
             
     except Exception as e:
         print(f"❌ 에러: {e}")
