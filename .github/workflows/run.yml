@@ -50,14 +50,14 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          # 변경된 두 파일을 모두 스테이징에 추가합니다.
-          git add topics.txt emergency_scripts.txt
+          # 영상 파일(reels_video.mp4)과 텍스트 파일들을 모두 추가합니다.
+          git add topics.txt emergency_scripts.txt reels_video.mp4
           # 변경 사항이 있을 때만 커밋하고 푸시합니다.
-          git diff --quiet && git diff --staged --quiet || (git commit -m "🔄 주제 및 비상 대본 리스트 업데이트" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "🔄 영상 업데이트 및 데이터 리스트 갱신" && git push)
 
       - name: Upload Video Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: reels-video
-          path: final_reels.mp4
+          path: reels_video.mp4
