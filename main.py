@@ -9,9 +9,18 @@ import moviepy.video.fx.all as vfx
 
 # 파일 경로 및 환경 변수 설정
 TOPIC_FILE = "topics.txt"
-# GitHub Secrets에서 가져올 정보들
 ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
 ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID")
+
+# --- [수정 구간] 해시태그 및 언급할 계정 설정 ---
+# 캡션에 포함될 해시태그들
+HASHTAGS = """
+#wealth #success #darkpsychology #motivation #millionaire 
+#entrepreneur #luxurylifestyle #mindset #discipline
+"""
+# 태그할 유명 계정들 (인스타그램 아이디)
+MENTIONS = "@instagram @millionaire_mentor @successmindset @richkids"
+# ----------------------------------------------
 
 def get_topics_from_file():
     if not os.path.exists(TOPIC_FILE):
@@ -78,22 +87,6 @@ def get_best_sales_script(selected_topic):
         print(f"⚠️ 대본 생성 에러: {e}")
         return None
 
-def upload_to_instagram(video_path, caption):
-    """제작된 영상을 인스타그램에 실제로 업로드하는 함수"""
-    if not ACCESS_TOKEN or not ACCOUNT_ID:
-        print("❌ 에러: 토큰 또는 계정 ID가 설정되지 않았습니다.")
-        return
-
-    print("🚀 인스타그램 업로드 시작...")
-    
-    # 1. 미디어 업로드 준비 (영상 업로드) - 여기서는 GitHub에 생성된 파일 경로를 사용할 수 없으므로,
-    # 실제 환경에서는 영상을 어딘가(웹사이트 등)에 올린 URL이 필요하지만, 
-    # GitHub Actions 환경에서는 보통 영상을 먼저 업로드하는 과정을 거칩니다.
-    # (이 부분은 단순화된 로직이며, 실제 연동 시 영상 호스팅 URL이 필요할 수 있습니다.)
-    
-    print("⚠️ 알림: 현재 코드는 영상 제작 완료까지 수행합니다. 자동 업로드를 위해서는 영상 파일의 공개 URL이 필요합니다.")
-    # (실제 API 업로드 로직은 추가적인 서버 환경이 필요하므로, 여기서는 제작 완료에 집중합니다.)
-
 def run_reels_bot():
     topics = get_topics_from_file()
     if not topics:
@@ -104,6 +97,9 @@ def run_reels_bot():
     script = get_best_sales_script(selected_topic)
     
     if not script: return
+
+    # ✅ 캡션에 AI 대본 + 태그 + 해시태그를 합칩니다.
+    final_caption = f"{script}\n\n{MENTIONS}\n\n{HASHTAGS}"
 
     if not os.path.exists("background.mp4"):
         print("❌ background.mp4 없음")
@@ -121,6 +117,7 @@ def run_reels_bot():
         final.write_videofile("final_reels.mp4", fps=24, codec="libx264", audio=False)
         
         print(f"--- ★ 제작 완료:{selected_topic} ★ ---")
+        print(f"📝 최종 인스타그램 캡션 설정 완료:\n{final_caption}")
         
         # 주제 업데이트
         update_topics_list(selected_topic)
