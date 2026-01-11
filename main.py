@@ -169,16 +169,35 @@ def run_reels_bot():
         
         print(f"--- ★ 제작 완료 ★ ---")
 
-        # 🚀 [업로드 단계] 임시 서버를 통해 인스타그램에 주소 전달
-        with open(final_video_path, 'rb') as f:
-            print("🔗 임시 영상 URL 생성 중...")
-            # 0x0.st 서비스를 이용하여 인스타그램이 접근 가능한 URL을 만듭니다.
-            r_file = requests.post("https://0x0.st", files={'file': f})
-            if r_file.status_code == 200:
-                public_url = r_file.text.strip()
-                post_to_instagram(public_url, final_caption)
-            else:
-                print("❌ 임시 URL 생성 실패. 업로드를 건너뜁니다.")
+        # 🚀 [업로드 단계] 멀티 서버를 활용한 임시 URL 생성
+        public_url = None
+        
+        # 시도 1: 0x0.st
+        try:
+            print("🔗 임시 URL 생성 시도 1 (0x0.st)...")
+            with open(final_video_path, 'rb') as f:
+                r_file = requests.post("https://0x0.st", files={'file': f}, timeout=30)
+                if r_file.status_code == 200:
+                    public_url = r_file.text.strip()
+        except Exception as e:
+            print(f"⚠️ 0x0.st 시도 실패: {e}")
+
+        # 시도 2: file.io (첫 번째 서버 실패 시)
+        if not public_url:
+            try:
+                print("🔗 임시 URL 생성 시도 2 (file.io)...")
+                with open(final_video_path, 'rb') as f:
+                    r_file = requests.post("https://file.io", files={'file': f}, timeout=30)
+                    if r_file.status_code == 200:
+                        public_url = r_file.json().get('link')
+            except Exception as e:
+                print(f"⚠️ file.io 시도 실패: {e}")
+
+        # 최종 업로드 실행
+        if public_url:
+            post_to_instagram(public_url, final_caption)
+        else:
+            print("❌ 모든 임시 URL 생성 서버가 응답하지 않습니다. 업로드를 건너뜁니다.")
         
         # 사용한 데이터 업데이트
         if is_emergency:
