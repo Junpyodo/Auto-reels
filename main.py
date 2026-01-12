@@ -100,7 +100,7 @@ def get_best_sales_script(selected_topic):
             print(f"⚠️ {model} 모델 생성 실패, 다음 모델 시도...")
             continue
     
-    print("🆘 [AI 생성 실패] 모든 AI 모델이 응답하지 않습니다. 비상 대본을 사용합니다.")
+    print("🆘 [AI 생성 실패] 모든 AI 모델이 응답하지 않���니다. 비상 대본을 사용합니다.")
     e_scripts = get_list_from_file(EMERGENCY_FILE, ["The 1% don't sleep until the job is done."])
     return random.choice(e_scripts), True
 
@@ -111,7 +111,8 @@ def post_to_instagram(video_url, caption):
     # 1단계: 미디어 컨테이너 생성
     post_url = f"https://graph.facebook.com/v19.0/{ACCOUNT_ID}/media"
     payload = {
-        'media_type': 'REELS',
+        # 변경: 'REELS' 대신 'VIDEO' 사용 (deprecated/허용되지 않는 값 사용으로 인한 에러 방지)
+        'media_type': 'VIDEO',
         'video_url': video_url,
         'caption': caption,
         'access_token': ACCESS_TOKEN
