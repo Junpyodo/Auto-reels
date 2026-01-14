@@ -1,0 +1,4 @@
+boto3
+moviepy==1.0.3
+openai
+requests
