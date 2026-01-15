@@ -3,29 +3,39 @@ name: Auto Reels Uploader
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 10 * * *' # 하루에 한 번 (UTC 10:00) — 필요하면 변경
+    - cron: '0 10 * * *' 
   repository_dispatch:
 
 jobs:
   build-and-run:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      - name: Install system deps for moviepy
+
+      - name: Install System Dependencies (ImageMagick & Fonts)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
-      - name: Install Python deps
+          # moviepy 자막 생성을 위한 필수 패키지 설치
+          sudo apt-get install -y ffmpeg imagemagick fonts-liberation
+          
+          # [핵심] ImageMagick의 보안 정책을 수정하여 자막 생성을 허용합니다.
+          # 이 작업이 없으면 'policy error' 또는 'unset' 에러가 발생합니다.
+          sudo sed -i 's/domain="path" rights="none" pattern="@\*"/domain="path" rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml
+
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      - name: Run auto-reels
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Reels Script
         env:
           INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
           INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
@@ -37,3 +47,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python main.py
+
+      - name: Commit and Push Changes
+        # 사용한 대본(used_scripts.json)이나 업데이트된 주제들을 저장소에 다시 기록합니다.
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          git commit -m "Update logs and data files [skip ci]" || echo "No changes to commit"
+          git push
