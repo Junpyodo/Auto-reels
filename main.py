@@ -27,7 +27,7 @@ USED_SCRIPTS_FILE = "used_scripts.json"
 ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
 ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # Actions에서 자동 제공 가능 (선택적)
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # Actions에서 자동 제공 가능
 
 HASHTAGS = "#wealth #success #darkpsychology #motivation #millionaire #mindset"
 MENTIONS = "@instagram"
@@ -223,9 +223,7 @@ def upload_to_transfersh(file_path, max_attempts=2):
 
 def gh_pages_publish(file_path):
     """
-    GITHUB_TOKEN이 있으면 gh-pages 브랜치에 파일을 커밋해서
-    https://<GITHUB_ID>.github.io/<REPO_NAME>/<file> 로 제공되게 함.
-    (Actions 내에서 사용 권장)
+    [에러 해결 버전] Git 사용자 정보 설정 및 gh-pages 브랜치 자동 생성 기능 추가
     """
     if not GITHUB_TOKEN:
         print("ℹ️ GITHUB_TOKEN이 없어 gh-pages 배포 불가.")
@@ -234,29 +232,35 @@ def gh_pages_publish(file_path):
         dest_path = os.path.basename(file_path)
         repo_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{GITHUB_ID}/{REPO_NAME}.git"
         workdir = "/tmp/auto-reels-ghpages"
-        # 준비 디렉터리
+        
         subprocess.run(["rm", "-rf", workdir], check=False)
         subprocess.run(["git", "clone", repo_url, workdir], check=True)
-        # checkout/create gh-pages
-        subprocess.run(["git", "checkout", "gh-pages"], cwd=workdir, check=False)
-        # copy file into root of gh-pages
+        
+        # Git Identity 설정 (에러 방지 핵심)
+        subprocess.run(["git", "config", "user.name", "github-actions[bot]"], cwd=workdir, check=True)
+        subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], cwd=workdir, check=True)
+
+        # gh-pages 브랜치 없으면 생성
+        ret = subprocess.run(["git", "checkout", "gh-pages"], cwd=workdir, capture_output=True)
+        if ret.returncode != 0:
+            print("🌱 gh-pages 브랜치를 새로 생성합니다.")
+            subprocess.run(["git", "checkout", "--orphan", "gh-pages"], cwd=workdir, check=True)
+            subprocess.run(["git", "rm", "-rf", "."], cwd=workdir, check=True)
+
         dest = os.path.join(workdir, dest_path)
         subprocess.run(["cp", file_path, dest], check=True)
         subprocess.run(["git", "add", dest_path], cwd=workdir, check=True)
-        subprocess.run(["git", "commit", "-m", "Add latest reel video"], cwd=workdir, check=True)
+        subprocess.run(["git", "commit", "-m", "🚀 Add latest reel video"], cwd=workdir, check=True)
         subprocess.run(["git", "push", "origin", "gh-pages"], cwd=workdir, check=True)
+        
         public_url = f"https://{GITHUB_ID}.github.io/{REPO_NAME}/{dest_path}"
         print("🔗 gh-pages 업로드 완료:", public_url)
         return public_url
-    except subprocess.CalledProcessError as e:
-        print("⚠️ gh-pages 업로드 실패:", e)
-        return None
     except Exception as e:
-        print("⚠️ gh-pages 예외:", e)
+        print("❌ gh-pages 업로드 실패:", e)
         return None
 
 def upload_video_and_get_public_url(file_path):
-    # 1) S3 (aws_upload.py가 있으면 사용)
     if upload_file_to_s3:
         try:
             print("🔼 S3 업로드 시도...")
@@ -267,24 +271,17 @@ def upload_video_and_get_public_url(file_path):
         except Exception as e:
             print("⚠️ S3 업로드 예외:", e)
 
-    # 2) gh-pages (Actions에서 실행하는 경우 권장)
     gh_url = gh_pages_publish(file_path)
     if gh_url:
         return gh_url
 
-    # 3) 임시 업로드(0x0.st)
     print("🔼 0x0.st 업로드 시도...")
     url = upload_to_0x0(file_path)
-    if url:
-        print("🔗 업로드 성공:", url)
-        return url
+    if url: return url
 
-    # 4) transfer.sh
     print("🔼 transfer.sh 업로드 시도...")
     url = upload_to_transfersh(file_path)
-    if url:
-        print("🔗 업로드 성공:", url)
-        return url
+    if url: return url
 
     print("❌ 공개 URL 생성 실패")
     return None
@@ -298,86 +295,62 @@ def post_to_instagram(video_url, caption, api_version="v19.0"):
     print("📤 인스타 업로드 시도. URL:", video_url)
     post_url = f"https://graph.facebook.com/{api_version}/{ACCOUNT_ID}/media"
     payload = {
-        'media_type':'VIDEO',
+        'media_type':'REELS',  # [수정 완료] VIDEO -> REELS
         'video_url': video_url,
         'caption': caption,
         'access_token': ACCESS_TOKEN
     }
     try:
         r = requests.post(post_url, data=payload, timeout=30)
-        try:
-            res = r.json()
-        except Exception:
-            res = {"raw_text": r.text}
+        res = r.json() if r.status_code != 204 else {}
         print("▶ container create response:", res)
-        if r.status_code != 200 and "id" not in res:
-            print("❌ 컨테이너 생성 실패:", r.status_code, r.text)
+        
+        if r.status_code != 200 or "id" not in res:
+            print("❌ 컨테이너 생성 실패:", r.text)
             return False
+            
         creation_id = res.get("id")
-        if not creation_id:
-            print("❌ creation_id 없음")
-            return False
 
-        # Polling으로 상태 확인 (최대 5분)
-        print("⏳ 인스타그램 처리 대기 및 상태 체크...")
+        # Polling
+        print("⏳ 인스타그램 처리 대기...")
         status_url = f"https://graph.facebook.com/{api_version}/{creation_id}"
         params = {'fields':'status_code,progress,video_id','access_token':ACCESS_TOKEN}
-        total_wait = 0
-        max_wait = 300
-        poll_interval = 5
-        while total_wait < max_wait:
+        
+        for _ in range(60): # 최대 5분
             rr = requests.get(status_url, params=params, timeout=30)
-            try:
-                status_res = rr.json()
-            except Exception:
-                status_res = {"raw_text": rr.text}
-            print("▶ 상태 조회:", status_res)
-            st = status_res.get("status_code") or status_res.get("status")
-            prog = status_res.get("progress")
-            if st and (str(st).upper() in ("FINISHED","PUBLISHED") or (isinstance(st,str) and "finished" in st.lower())):
-                break
-            if prog:
-                try:
-                    if int(prog) >= 100:
-                        break
-                except Exception:
-                    pass
-            time.sleep(poll_interval)
-            total_wait += poll_interval
+            status_res = rr.json()
+            st = status_res.get("status_code", "").upper()
+            if st in ("FINISHED", "PUBLISHED"): break
+            time.sleep(5)
 
-        # publish
+        # Publish
         publish_url = f"https://graph.facebook.com/{api_version}/{ACCOUNT_ID}/media_publish"
         r_pub = requests.post(publish_url, data={'creation_id':creation_id,'access_token':ACCESS_TOKEN}, timeout=30)
-        try:
-            pub_res = r_pub.json()
-        except Exception:
-            pub_res = {"raw_text": r_pub.text}
-        print("▶ publish response:", pub_res)
+        pub_res = r_pub.json()
+        
         if r_pub.status_code == 200 and 'id' in pub_res:
-            print("🎉 업로드 성공! 게시물 ID:", pub_res.get("id"))
+            print("🎉 업로드 성공! ID:", pub_res.get("id"))
             return True
         else:
-            print("❌ publish 실패:", r_pub.status_code, r_pub.text)
+            print("❌ publish 실패:", r_pub.text)
             return False
     except Exception as e:
         print("❌ API 예외:", e)
-        traceback.print_exc()
         return False
 
 # -------------- 메인 흐름 --------------
 def run_reels_bot():
     if not os.path.exists("background.mp4"):
-        print("❌ background.mp4 파일이 필요합니다(루트에 위치).")
+        print("❌ background.mp4 파일이 필요합니다.")
         return
 
     topics = get_list_from_file(TOPIC_FILE, ["Dark psychology of wealth"])
     selected_topic = random.choice(topics)
-    print("🎯 선택된 주제:", selected_topic)
+    print("🎯 주제:", selected_topic)
 
     script, is_emergency = get_best_sales_script(selected_topic)
     final_caption = f"{script}\n\n{MENTIONS}\n\n{HASHTAGS}"
 
-    # 영상 제작
     try:
         print("🎬 영상 편집 시작...")
         video = VideoFileClip("background.mp4").subclip(0,8).fx(vfx.colorx, 0.25)
@@ -389,31 +362,22 @@ def run_reels_bot():
         final.write_videofile(final_video_name, fps=24, codec="libx264", audio=False)
     except Exception as e:
         print("❌ 영상 제작 오류:", e)
-        traceback.print_exc()
         return
 
-    # 공개 URL 확보
     public_url = upload_video_and_get_public_url(final_video_name)
     if not public_url:
-        print("❌ 공개 URL 생성 실패. 업로드 중단.")
+        print("❌ 공개 URL 생성 실패.")
         return
 
-    # 인스타 업로드
     success = post_to_instagram(public_url, final_caption)
 
-    # 사후 처리
-    try:
-        if success:
-            if is_emergency:
-                update_emergency_scripts(used_script=script)
-            else:
-                update_topics_list(used_topic=selected_topic)
-                update_emergency_scripts()
+    if success:
+        if is_emergency: update_emergency_scripts(used_script=script)
         else:
-            print("⚠️ 업로드 실패 — emergency 리스트 보충 시도")
+            update_topics_list(used_topic=selected_topic)
             update_emergency_scripts()
-    except Exception as e:
-        print("⚠️ 사후 처리 오류:", e)
+    else:
+        update_emergency_scripts()
 
 if __name__ == "__main__":
     run_reels_bot()
