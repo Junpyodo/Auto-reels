@@ -294,10 +294,15 @@ def post_to_instagram(video_url, caption, api_version="v19.0"):
 
     print("📤 인스타 업로드 시도. URL:", video_url)
     post_url = f"https://graph.facebook.com/{api_version}/{ACCOUNT_ID}/media"
+    
+    api_version = "v19.0" 
+container_url = f"https://graph.facebook.com/{api_version}/{INSTAGRAM_BUSINESS_ID}/media"
+
     payload = {
-        'media_type':'REELS',  # [수정 완료] VIDEO -> REELS
+        'media_type': 'REELS',
         'video_url': video_url,
         'caption': caption,
+        'share_to_feed': 'true', # 반드시 문자열 'true'로 전달
         'access_token': ACCESS_TOKEN
     }
     try:
