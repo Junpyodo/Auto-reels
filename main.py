@@ -369,8 +369,8 @@ def run_reels_bot():
         print("❌ 공개 URL 생성 실패.")
         return
 
-    # [핵심 수정] 영상이 웹에 완전히 뿌려질 때까지 90초 대기
-    print("⏳ GitHub Pages 배포 완료를 위해 90초간 대기합니다. 잠시만 기다려주세요...")
+    # [핵심 수정] 영상이 웹에 완전히 뿌려질 때까지 120초 대기
+    print("⏳ GitHub Pages 배포 완료를 위해 120초간 대기합니다. 잠시만 기다려주세요...")
     time.sleep(120)
     success = post_to_instagram(public_url, final_caption)
 
