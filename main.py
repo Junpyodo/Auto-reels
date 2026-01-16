@@ -296,7 +296,7 @@ def post_to_instagram(video_url, caption, api_version="v19.0"):
     post_url = f"https://graph.facebook.com/{api_version}/{ACCOUNT_ID}/media"
     
     api_version = "v19.0" 
-container_url = f"https://graph.facebook.com/{api_version}/{INSTAGRAM_BUSINESS_ID}/media"
+container_url = f"https://graph.facebook.com/{api_version}/{INSTAGRAM_ACCOUNT_ID}/media"
 
     payload = {
         'media_type': 'REELS',
