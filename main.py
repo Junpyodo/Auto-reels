@@ -306,7 +306,7 @@ def post_to_instagram(video_url, caption, api_version="v19.0"):
         'access_token': ACCESS_TOKEN
     }
     try:
-        r = requests.post(post_url, data=payload, timeout=30)
+        r = requests.post(container_url, data=payload, timeout=30)
         res = r.json() if r.status_code != 204 else {}
         print("▶ container create response:", res)
         
