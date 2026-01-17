@@ -288,59 +288,77 @@ def upload_video_and_get_public_url(file_path):
 
 # -------------- Instagram 업로드 --------------
 def post_to_instagram(video_url, caption, api_version="v19.0"):
+    # 1. 환경 변수 로드 (함수 내 정의로 안전성 확보)
+    ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
+    ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID")
+
     if not ACCESS_TOKEN or not ACCOUNT_ID:
         print("❌ INSTAGRAM_ACCESS_TOKEN 또는 INSTAGRAM_ACCOUNT_ID가 설정되어 있지 않습니다.")
         return False
 
     print("📤 인스타 업로드 시도. URL:", video_url)
-    post_url = f"https://graph.facebook.com/{api_version}/{ACCOUNT_ID}/media"
     
-    api_version = "v19.0" 
+    # 2. 미디어 컨테이너 생성 주소
     container_url = f"https://graph.facebook.com/{api_version}/{ACCOUNT_ID}/media"
 
     payload = {
         'media_type': 'REELS',
         'video_url': video_url,
         'caption': caption,
-        'share_to_feed': 'true', # 반드시 문자열 'true'로 전달
+        'share_to_feed': 'true', 
         'access_token': ACCESS_TOKEN
     }
+    
     try:
+        # 3. 컨테이너 생성
         r = requests.post(container_url, data=payload, timeout=30)
-        res = r.json() if r.status_code != 204 else {}
+        res = r.json()
         print("▶ container create response:", res)
         
-        if r.status_code != 200 or "id" not in res:
-            print("❌ 컨테이너 생성 실패:", r.text)
+        if "id" not in res:
+            print("❌ 컨테이너 생성 실패:", res)
             return False
             
         creation_id = res.get("id")
 
-        # Polling
-        print("⏳ 인스타그램 처리 대기...")
+        # 4. 폴링(Polling): 인스타그램 서버의 영상 처리 상태 확인
+        print("⏳ 인스타그램 서버에서 영상 처리 상태 확인 중...")
         status_url = f"https://graph.facebook.com/{api_version}/{creation_id}"
-        params = {'fields':'status_code,progress,video_id','access_token':ACCESS_TOKEN}
+        status_params = {'fields': 'status_code', 'access_token': ACCESS_TOKEN}
         
-        for _ in range(60): # 최대 5분
-            rr = requests.get(status_url, params=params, timeout=30)
-            status_res = rr.json()
-            st = status_res.get("status_code", "").upper()
-            if st in ("FINISHED", "PUBLISHED"): break
+        for i in range(20): # 최대 100초 (5초 * 20번)
             time.sleep(5)
+            check_r = requests.get(status_url, params=status_params, timeout=30)
+            status_res = check_r.json()
+            status_code = status_res.get("status_code", "").upper()
+            
+            print(f"   - 상태 확인 ({i+1}/20): {status_code}")
+            if status_code == "FINISHED":
+                break
+            elif status_code == "ERROR":
+                print("❌ 영상 처리 중 에러 발생:", status_res)
+                return False
 
-        # Publish
+        # 5. 최종 게시 (Publish)
+        print("🚀 영상 처리 완료. 최종 게시 중...")
         publish_url = f"https://graph.facebook.com/{api_version}/{ACCOUNT_ID}/media_publish"
-        r_pub = requests.post(publish_url, data={'creation_id':creation_id,'access_token':ACCESS_TOKEN}, timeout=30)
+        publish_payload = {
+            'creation_id': creation_id,
+            'access_token': ACCESS_TOKEN
+        }
+        
+        r_pub = requests.post(publish_url, data=publish_payload, timeout=30)
         pub_res = r_pub.json()
         
-        if r_pub.status_code == 200 and 'id' in pub_res:
-            print("🎉 업로드 성공! ID:", pub_res.get("id"))
+        if 'id' in pub_res:
+            print("🎉 업로드 성공! 게시물 ID:", pub_res.get("id"))
             return True
         else:
-            print("❌ publish 실패:", r_pub.text)
+            print("❌ 최종 게시 실패:", pub_res)
             return False
+
     except Exception as e:
-        print("❌ API 예외:", e)
+        print("❌ API 예외 발생:", e)
         return False
 
 # -------------- 메인 흐름 --------------
@@ -373,6 +391,26 @@ def run_reels_bot():
     if not public_url:
         print("❌ 공개 URL 생성 실패.")
         return
+
+    print("⏳ 배포 안정화를 위해 60초 대기 후 인스타그램 전송을 시작합니다...")
+    time.sleep(60)
+
+    # 드디어 인스타그램 업로드 함수 호출
+    success = post_to_instagram(public_url, final_caption)
+
+    # 결과에 따른 후속 처리 (리스트 업데이트 등)
+    if success:
+        print("✅ 모든 프로세스가 성공적으로 완료되었습니다!")
+        if is_emergency:
+            update_emergency_scripts(used_script=script)
+        else:
+            update_topics_list(used_topic=selected_topic)
+            update_emergency_scripts()
+    else:
+        print("⚠️ 업로드 실패. 로그를 확인해 주세요.")
+
+if __name__ == "__main__":
+    run_reels_bot()
 
     # [핵심 수정] 영상이 웹에 완전히 뿌려질 때까지 120초 대기
     print("⏳ GitHub Pages 배포 완료를 위해 120초간 대기합니다. 잠시만 기다려주세요...")
