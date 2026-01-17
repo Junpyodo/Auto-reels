@@ -411,19 +411,3 @@ def run_reels_bot():
 
 if __name__ == "__main__":
     run_reels_bot()
-
-    # [핵심 수정] 영상이 웹에 완전히 뿌려질 때까지 120초 대기
-    print("⏳ GitHub Pages 배포 완료를 위해 120초간 대기합니다. 잠시만 기다려주세요...")
-    time.sleep(120)
-    success = post_to_instagram(public_url, final_caption)
-
-    if success:
-        if is_emergency: update_emergency_scripts(used_script=script)
-        else:
-            update_topics_list(used_topic=selected_topic)
-            update_emergency_scripts()
-    else:
-        update_emergency_scripts()
-
-if __name__ == "__main__":
-    run_reels_bot()
