@@ -88,35 +88,36 @@ def safe_extract_text_from_openai_response(resp):
     return ""
 
 # -------------- AI 관련 (기존과 동일) --------------
-def update_emergency_scripts(used_script=None):
+def update_emergency_scripts(current_topic=None, used_script=None):
     scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence.", "Success is the best revenge."])
-    if used_script and used_script in scripts:
-        scripts.remove(used_script)
+    
+    # [핵심] 사용한 대본이 있다면 리스트에서 삭제
+    if used_script:
+        scripts = [s for s in scripts if s.strip().rstrip('.') != used_script.strip().rstrip('.')]
 
     if not OPENROUTER_API_KEY:
         save_list_to_file(EMERGENCY_FILE, scripts)
-        print("⚠️ OPENROUTER_API_KEY가 없습니다 — emergency 업데이트 건너뜀")
         return
 
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
-    prompt = "Generate 10 powerful, viral 20-word dark psychology scripts for Instagram Reels. One per line. No numbers."
+    
+    # [핵심] 현재 주제와 관련된 문장으로 보충하도록 프롬프트 수정
+    topic_str = f"based on the topic '{current_topic}'" if current_topic else "about dark psychology and wealth"
+    prompt = f"Generate 10 powerful, viral 20-word scripts for Instagram Reels {topic_str}. One per line. No numbers, no quotes."
 
     for model in AI_MODELS:
         try:
             time.sleep(1)
             resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt}])
             text = safe_extract_text_from_openai_response(resp)
-            if not text:
-                continue
-            new_list = [line.strip().replace('"','') for line in text.split("\n") if line.strip()]
+            if not text: continue
+            new_list = [line.strip().replace('"','') for line in text.split("\n") if len(line.strip()) > 5]
             if new_list:
                 combined = list(dict.fromkeys(scripts + new_list))
                 save_list_to_file(EMERGENCY_FILE, combined)
-                print(f"✅ 비상 대본 리스트 보충 완료 ({model})")
+                print(f"✅ 비상 대본 업데이트 완료 ({model})")
                 return
-        except Exception as e:
-            print(f"⚠️ update_emergency_scripts: {model} 실패: {e}")
-            continue
+        except: continue
     save_list_to_file(EMERGENCY_FILE, scripts)
     print("⚠️ 모든 모델 실패 — emergency 리스트는 유지됨")
 
@@ -180,24 +181,22 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
     for model in AI_MODELS:
         for attempt in range(max_attempts_per_model):
             try:
-                time.sleep(1 + attempt)
+                time.sleep(1)
                 resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt_content}])
                 script = safe_extract_text_from_openai_response(resp).replace('"','').strip()
-                if not script:
+                if not script: continue
+                
+                # 마침표와 공백을 무시하고 중복 검사
+                clean_script = script.split("\n")[0].strip().rstrip('.')
+                if any(clean_script == u.strip().rstrip('.') for u in used_scripts):
+                    print("⚠️ 유사한 대본이 이미 존재함 — 건너뜀")
                     continue
-                script_line = script.split("\n")[0].strip()
-                if len(script_line) < 6:
-                    continue
-                if script_line in used_scripts:
-                    print("⚠️ 생성된 스크립트는 이미 사용됨 — 건너뜀")
-                    continue
+                
                 print(f"✨ [AI 생성 성공] 모델: {model}")
-                used_scripts.append(script_line)
+                used_scripts.append(script)
                 save_json(USED_SCRIPTS_FILE, used_scripts)
-                return script_line, False
-            except Exception as e:
-                print(f"⚠️ {model} 실패 (시도 {attempt+1}): {e}")
-                continue
+                return script, False
+            except: continue
 
     print("🆘 모든 모델 실패 — 비상 대본 사용")
     e_scripts = get_list_from_file(EMERGENCY_FILE, ["The 1% don't sleep until the job is done."])
@@ -413,17 +412,18 @@ def run_reels_bot():
     time.sleep(60)
 
     success = post_to_instagram(public_url, final_caption)
-
+    
     if success:
         print("✅ 모든 프로세스가 성공적으로 완료되었습니다!")
         if is_emergency:
-            update_emergency_scripts(used_script=script)
+            # [수정] 비상 대본 사용 시에도 주제를 넘겨주어 관련 문장 보충
+            update_emergency_scripts(current_topic=selected_topic, used_script=script)
         else:
+            # [수정] 일반 성공 시에도 주제를 비상 대본 업데이트에 활용
             update_topics_list(used_topic=selected_topic)
-            update_emergency_scripts()
+            update_emergency_scripts(current_topic=selected_topic)
     else:
         print("⚠️ 업로드 실패. 로그를 확인해 주세요.")
 
 if __name__ == "__main__":
-
     run_reels_bot()
