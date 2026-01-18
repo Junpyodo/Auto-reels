@@ -210,6 +210,9 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
                 used_scripts.append(script)
                 save_json(USED_SCRIPTS_FILE, used_scripts)
                 return script, False
+            except Exception as e:
+                print(f"⚠️ {model} 시도 중 에러: {e}")
+                continue # 에러 발생 시 다음 시도나 다음 모델로 넘어감
 
     print("🆘 모든 모델 실패 — 비상 대본 사용")
     e_scripts = get_list_from_file(EMERGENCY_FILE, ["The 1% don't sleep until the job is done."])
@@ -440,4 +443,5 @@ def run_reels_bot():
 
 if __name__ == "__main__":
     run_reels_bot()
+
 
