@@ -20,20 +20,24 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install System Dependencies (ImageMagick & Fonts)
+      - name: Install System Dependencies (FFmpeg & ImageMagick)
         run: |
           sudo apt-get update
-          # moviepy 자막 생성을 위한 필수 패키지 설치
-          sudo apt-get install -y ffmpeg imagemagick fonts-liberation
+          # 자막과 오디오 합성을 위해 ffmpeg과 고성능 폰트 설치
+          sudo apt-get install -y ffmpeg imagemagick fonts-liberation fonts-noto-cjk
           
-          # [핵심] ImageMagick의 보안 정책을 수정하여 자막 생성을 허용합니다.
-          # 이 작업이 없으면 'policy error' 또는 'unset' 에러가 발생합니다.
+          # [핵심] ImageMagick 보안 정책 수정 (자막 렌더링 허용)
           sudo sed -i 's/domain="path" rights="none" pattern="@\*"/domain="path" rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml
 
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          # moviepy 버전 충돌 방지를 위해 명시적 설치 추천
+          if [ -f requirements.txt ]; then 
+            pip install -r requirements.txt
+          else
+            pip install moviepy openai requests
+          fi
 
       - name: Run Reels Script
         env:
@@ -46,13 +50,14 @@ jobs:
           AWS_S3_REGION: ${{ secrets.AWS_S3_REGION }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # main.py 실행
           python main.py
 
       - name: Commit and Push Changes
-        # 사용한 대본(used_scripts.json)이나 업데이트된 주제들을 저장소에 다시 기록합니다.
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add .
-          git commit -m "Update logs and data files [skip ci]" || echo "No changes to commit"
-          git push
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          # used_scripts.json 및 topics.txt의 변경사항을 저장
+          git add used_scripts.json topics.txt emergency_scripts.txt || true
+          git commit -m "🚀 Update used scripts and topics [skip ci]" || echo "No changes to commit"
+          git push origin main
