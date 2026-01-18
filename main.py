@@ -65,7 +65,6 @@ def get_best_sales_script(selected_topic):
     used_scripts = load_json(USED_SCRIPTS_FILE, [])
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     
-    # AI 명령 수정: 형식(Script|Caption|Hashtags)을 명확하게 지시
     prompt_content = (
         f"Role: High-status Dark Psychology master for the elite 1%.\n"
         f"Topic: {selected_topic}.\n\n"
@@ -87,8 +86,6 @@ def get_best_sales_script(selected_topic):
                 timeout=30 
             )
             raw_data = safe_extract_text_from_openai_response(resp)
-            
-            # AI 응답을 '|' 기준으로 분리
             parts = raw_data.split('|')
             
             if len(parts) >= 3:
@@ -107,20 +104,33 @@ def get_best_sales_script(selected_topic):
             print(f"⚠️ AI 시도 실패: {e}")
             time.sleep(2)
 
-    # --- AI가 3번 모두 실패했을 때 실행되는 비상 로직 ---
+    # --- AI가 3번 모두 실패했을 때 실행되는 비상 로직 (수정된 부분) ---
     print("🚨 AI 응답 실패. 비상 대본(Emergency Scripts)을 사용합니다.")
     emergency_list = get_list_from_file(EMERGENCY_FILE)
     
     if not emergency_list:
-        # 비상 파일이 없을 때를 대비한 최후의 보루
         return "Control their mind before they control yours.", "Are you the hunter or the prey?", "#darkpsychology #power"
 
+    # 비상 대본 중 하나 랜덤 선택
     chosen = random.choice(emergency_list)
+    
     try:
         e_parts = chosen.split('|')
-        return e_parts[0].strip(), e_parts[1].strip(), e_parts[2].strip()
-    except:
-        return chosen.strip(), "Master your mind.", "#darkpsychology #success"
+        script = e_parts[0].strip().replace('"','')
+        caption = e_parts[1].strip()
+        hashtags = e_parts[2].strip()
+
+        # 1. used_scripts에 기록하여 나중에 AI가 중복 생성하는 것 방지
+        if script not in used_scripts:
+            used_scripts.append(script)
+            save_json(USED_SCRIPTS_FILE, used_scripts)
+
+        # 2. 비상 대본 파일에서 사용한 항목 삭제 후 저장
+        emergency_list.remove(chosen)
+        save_list_to_file(EMERGENCY_FILE, emergency_list)
+        print(f"🗑️ 비상 대본 사용 및 삭제 완료. (남은 비상용: {len(emergency_list)}개)")
+
+        return script, caption, hashtags
    
 def update_topics_with_new_ideas(current_topic):
     """현재 주제를 바탕으로 새로운 주제 5개를 추가함 (기존 주제 삭제 안함)"""
