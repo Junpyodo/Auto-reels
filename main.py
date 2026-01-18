@@ -9,12 +9,6 @@ from openai import OpenAI
 from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip, AudioFileClip
 import moviepy.video.fx.all as vfx
 
-# optional AWS helper
-try:
-    from aws_upload import upload_file_to_s3
-except Exception:
-    upload_file_to_s3 = None
-
 # --- 설정 ---
 GITHUB_ID = "Junpyodo"
 REPO_NAME = "Auto-reels"
@@ -28,7 +22,6 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 HASHTAGS = "#wealth #success #darkpsychology #motivation #millionaire #mindset"
-MENTIONS = "@instagram"
 
 AI_MODELS = [
     "google/gemini-2.0-flash-exp:free",
@@ -38,11 +31,9 @@ AI_MODELS = [
 ]
 
 # -------------- 유틸 --------------
-def get_list_from_file(file_path, default_values):
+def get_list_from_file(file_path):
     if not os.path.exists(file_path):
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(default_values))
-        return default_values[:]
+        return []
     with open(file_path, "r", encoding="utf-8") as f:
         return [line.strip() for line in f.readlines() if line.strip()]
 
@@ -69,11 +60,8 @@ def safe_extract_text_from_openai_response(resp):
     except: pass
     return ""
 
-# -------------- AI 핵심 로직 (중복될 경우 무한 재시도) --------------
+# -------------- AI 핵심 로직 (중복 무한 체크 + 새로운 주제 추가) --------------
 def get_best_sales_script(selected_topic):
-    if not OPENROUTER_API_KEY:
-        return random.choice(get_list_from_file(EMERGENCY_FILE, ["Power is silent."])), True
-
     used_scripts = load_json(USED_SCRIPTS_FILE, [])
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     
@@ -85,10 +73,9 @@ def get_best_sales_script(selected_topic):
         "2. Paradoxical Hope: Reveal a 'forbidden' psychological weapon.\n"
         "3. Tone: Cold, superior, predatory.\n"
         "4. Constraint: Exactly one sentence. No emojis. No hashtags.\n"
-        "5. Originality: Avoid cliches. Be lethal and unique."
     )
 
-    print(f"🤖 AI 대본 생성 시작 (주제: {selected_topic})")
+    print(f"🤖 AI 대본 생성 중... (주제: {selected_topic})")
     
     while True:
         model = random.choice(AI_MODELS)
@@ -96,58 +83,62 @@ def get_best_sales_script(selected_topic):
             resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt_content}])
             script = safe_extract_text_from_openai_response(resp).replace('"','').strip()
             
-            if script and len(script) > 12:
-                if script not in used_scripts:
-                    used_scripts.append(script)
-                    save_json(USED_SCRIPTS_FILE, used_scripts)
-                    print(f"✨ 새 대본 확정: {script} (모델: {model})")
-                    return script, False
-                else:
-                    print(f"🔄 중복 감지: 다시 생성 중... (모델: {model})")
-            
-            time.sleep(1)
-        except Exception as e:
-            print(f"⚠️ {model} 에러 발생, 재시도합니다.")
+            if script and len(script) > 12 and script not in used_scripts:
+                used_scripts.append(script)
+                save_json(USED_SCRIPTS_FILE, used_scripts)
+                print(f"✨ 새 대본 확정: {script}")
+                return script
+            print(f"🔄 중복 발생 또는 부적절한 대본, 재시도 중...")
+        except:
             time.sleep(2)
 
-# -------------- 영상 제작 (자막 스타일 및 음악 1개 고정) --------------
+def update_topics_with_new_ideas(current_topic):
+    """현재 주제를 바탕으로 새로운 주제 5개를 추가함 (기존 주제 삭제 안함)"""
+    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
+    prompt = f"Based on the topic '{current_topic}', suggest 5 new dark psychology topics for viral Instagram Reels. Write only the topics, one per line, no numbering."
+    
+    try:
+        resp = client.chat.completions.create(model=random.choice(AI_MODELS), messages=[{"role":"user","content":prompt}])
+        new_ideas = safe_extract_text_from_openai_response(resp).split('\n')
+        
+        topics = get_list_from_file(TOPIC_FILE)
+        # 중복되지 않는 새로운 아이디어만 추가
+        for idea in new_ideas:
+            idea = idea.strip()
+            if idea and idea not in topics:
+                topics.append(idea)
+        
+        save_list_to_file(TOPIC_FILE, topics)
+        print(f"✅ 새로운 주제 5개가 추가되었습니다.")
+    except:
+        print("⚠️ 새로운 주제 추가 실패 (다음 실행 시 재시도)")
+
+# -------------- 영상 제작 (음악 1개 고정 + 자막 스타일) --------------
 def create_video(script):
     try:
         print("🎬 영상 편집 및 음악 합성 시작...")
         video = VideoFileClip("background.mp4").subclip(0, 8).fx(vfx.colorx, 0.25)
         
-        # [자막 설정] 흰색 글자 + 검정 테두리
-        txt = TextClip(script, 
-                       fontsize=45, 
-                       color='white', 
+        txt = TextClip(script, fontsize=45, color='white', 
                        size=(int(video.w * 0.85), None),
-                       font='DejaVu-Sans-Bold', 
-                       method='caption', 
-                       align='center', 
-                       interline=12,
-                       stroke_color='black', 
-                       stroke_width=1.5).set_duration(8).set_pos('center')
+                       font='DejaVu-Sans-Bold', method='caption', align='center',
+                       interline=12, stroke_color='black', stroke_width=1.5).set_duration(8).set_pos('center')
         
         final_clip = CompositeVideoClip([video, txt])
         
-        # [음악 설정] music.mp3 하나만 사용
-        music_file = "music.mp3"
-        
-        if os.path.exists(music_file):
-            audio = AudioFileClip(music_file).subclip(0, 8)
+        if os.path.exists("music.mp3"):
+            audio = AudioFileClip("music.mp3").subclip(0, 8)
             final_clip = final_clip.set_audio(audio)
-            print(f"🎵 음악 적용 완료: {music_file}")
-        else:
-            print(f"ℹ️ {music_file} 파일이 없어 묵음으로 진행합니다.")
+            print("🎵 music.mp3 배경음악 적용 완료")
 
         final_video_name = "reels_video.mp4"
-        final_clip.write_videofile(final_video_name, fps=24, codec="libx264", audio=True if os.path.exists(music_file) else False)
+        final_clip.write_videofile(final_video_name, fps=24, codec="libx264", audio=os.path.exists("music.mp3"))
         return final_video_name
     except Exception as e:
         print(f"❌ 영상 제작 에러: {e}")
         return None
 
-# -------------- 업로드 로직 --------------
+# -------------- 업로드 및 실행 --------------
 def gh_pages_publish(file_path):
     if not GITHUB_TOKEN: return None
     try:
@@ -156,14 +147,6 @@ def gh_pages_publish(file_path):
         workdir = "/tmp/auto-reels-ghpages"
         subprocess.run(["rm", "-rf", workdir], check=False)
         subprocess.run(["git", "clone", repo_url, workdir], check=True)
-        subprocess.run(["git", "config", "user.name", "github-actions[bot]"], cwd=workdir, check=True)
-        subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], cwd=workdir, check=True)
-        
-        ret = subprocess.run(["git", "checkout", "gh-pages"], cwd=workdir, capture_output=True)
-        if ret.returncode != 0:
-            subprocess.run(["git", "checkout", "--orphan", "gh-pages"], cwd=workdir, check=True)
-            subprocess.run(["git", "rm", "-rf", "."], cwd=workdir, check=True)
-
         subprocess.run(["cp", file_path, os.path.join(workdir, dest_path)], check=True)
         subprocess.run(["git", "add", "."], cwd=workdir, check=True)
         subprocess.run(["git", "commit", "-m", "🚀 Add Reel"], cwd=workdir, check=True)
@@ -176,32 +159,39 @@ def post_to_instagram(video_url, caption):
     payload = {'media_type': 'REELS', 'video_url': video_url, 'caption': caption, 'access_token': ACCESS_TOKEN}
     try:
         r = requests.post(api_url, data=payload).json()
-        if "id" not in r: return False
         creation_id = r["id"]
         for _ in range(20):
             time.sleep(10)
             status = requests.get(f"https://graph.facebook.com/v19.0/{creation_id}?fields=status_code&access_token={ACCESS_TOKEN}").json()
             if status.get("status_code") == "FINISHED": break
-        
-        publish = requests.post(f"https://graph.facebook.com/v19.0/{ACCOUNT_ID}/media_publish", data={'creation_id': creation_id, 'access_token': ACCESS_TOKEN}).json()
-        return "id" in publish
+        requests.post(f"https://graph.facebook.com/v19.0/{ACCOUNT_ID}/media_publish", data={'creation_id': creation_id, 'access_token': ACCESS_TOKEN})
+        return True
     except: return False
 
-# -------------- 메인 실행 --------------
 def run_reels_bot():
     if not os.path.exists("background.mp4"): return
-    topics = get_list_from_file(TOPIC_FILE, ["Dark psychology of wealth"])
-    selected_topic = random.choice(topics)
     
-    script, is_e = get_best_sales_script(selected_topic)
+    # 1. 주제 선택 (기본값 제거, 파일에서만 가져옴)
+    topics = get_list_from_file(TOPIC_FILE)
+    if not topics:
+        print("❌ topics.txt 파일이 비어있습니다.")
+        return
+        
+    selected_topic = random.choice(topics)
+    print(f"🎯 선택된 주제: {selected_topic}")
+    
+    # 2. 대본 생성 및 영상 제작
+    script = get_best_sales_script(selected_topic)
     final_video = create_video(script)
 
     if final_video:
         p_url = gh_pages_publish(final_video)
         if p_url:
             time.sleep(60)
-            success = post_to_instagram(p_url, f"{script}\n\n{HASHTAGS}")
-            if success: print("✅ 업로드 완료!")
+            if post_to_instagram(p_url, f"{script}\n\n{HASHTAGS}"):
+                print("✅ 업로드 완료!")
+                # 3. 새로운 주제 보충 (기존 주제는 유지)
+                update_topics_with_new_ideas(selected_topic)
 
 if __name__ == "__main__":
     run_reels_bot()
