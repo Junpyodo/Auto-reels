@@ -157,9 +157,26 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
 
     used_scripts = load_json(USED_SCRIPTS_FILE, [])
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
-    prompt_content = f"Topic: {selected_topic}\nCreate a powerful 20-word dark psychology script for an Instagram Reel. No intro. Provide exactly one line."
+    
+    prompt_content = f"""
+    Topic: {selected_topic}
+    Role: You are a viral content creator specializing in Dark Psychology and Wealth Mindset that knows secret which only rich people knows.
+    Objective: Create a script for a viral Instagram Reel. (can be a bullet point style. like, top 5 things only rich knows...). After seeing this they must feel like they must buy the thing in my bio.
+    
+    Guidelines:
+    - Use the "Pattern Interrupt" technique: Start with a shocking truth or a counter-intuitive statement.
+    - Focus on high-status, dark psychology, or "the hidden secrets of the 1%".
+    - Tone: Cold, authoritative, and mysterious. Avoid clichés like "believe in yourself" or "work hard".
+    - Structure: A powerful statement that makes the viewer feel they are missing out or being lied to.
+    
+    Example Style: 
+    - "Your friends don't want you to succeed; they want you to stay relatable."
+    - "The 1% don't compete; they control the environment while you play the game."
+    
+    Provide ONLY the script. No quotes, no intro.
+    """
 
-    print("🤖 AI 대본 생성 시도 중...")
+    print("🤖 강화된 AI 대본 생성 시도 중...")
     for model in AI_MODELS:
         for attempt in range(max_attempts_per_model):
             try:
@@ -408,4 +425,5 @@ def run_reels_bot():
         print("⚠️ 업로드 실패. 로그를 확인해 주세요.")
 
 if __name__ == "__main__":
+
     run_reels_bot()
