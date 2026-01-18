@@ -183,20 +183,33 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
             try:
                 time.sleep(1)
                 resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt_content}])
-                script = safe_extract_text_from_openai_response(resp).replace('"','').strip()
-                if not script: continue
+                raw_script = safe_extract_text_from_openai_response(resp)
                 
-                # 마침표와 공백을 무시하고 중복 검사
-                clean_script = script.split("\n")[0].strip().rstrip('.')
-                if any(clean_script == u.strip().rstrip('.') for u in used_scripts):
-                    print("⚠️ 유사한 대본이 이미 존재함 — 건너뜀")
+                # [수정] 불필요한 태그나 공백 제거 로직 강화
+                script = raw_script.replace('Script:', '').replace('Sentence:', '').replace('"', '').strip()
+                if not script or len(script) < 10: continue
+                
+                # 첫 줄만 가져오기 (AI가 여러 줄 써도 첫 문장만 사용)
+                script = script.split('\n')[0].strip()
+
+                # [중복 체크] 이미 썼던 대본인지 확인
+                clean_comparison = script.lower().replace(" ", "").replace("'", "").replace('"', '').rstrip('.')
+                
+                is_duplicate = False
+                for u in used_scripts:
+                    if clean_comparison == u.lower().replace(" ", "").replace("'", "").replace('"', '').rstrip('.'):
+                        is_duplicate = True
+                        break
+                
+                if is_duplicate:
+                    print(f"⚠️ 중복 대본 발견 ({model}) - 다시 생성합니다.")
                     continue
                 
-                print(f"✨ [AI 생성 성공] 모델: {model}")
+                # 중복이 아니면 출력 및 저장
+                print(f"✨ [새 대본 확정] 모델: {model}\n내용: {script}")
                 used_scripts.append(script)
                 save_json(USED_SCRIPTS_FILE, used_scripts)
                 return script, False
-            except: continue
 
     print("🆘 모든 모델 실패 — 비상 대본 사용")
     e_scripts = get_list_from_file(EMERGENCY_FILE, ["The 1% don't sleep until the job is done."])
@@ -427,3 +440,4 @@ def run_reels_bot():
 
 if __name__ == "__main__":
     run_reels_bot()
+
