@@ -20,11 +20,12 @@ ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
+# [수정] 성공 확률이 가장 높은 표준 모델 경로로 변경 (404 에러 방지)
 AI_MODELS = [
     "google/gemini-2.0-flash-exp:free",
-    "google/gemini-flash-1.5-8b:free",
-    "openai/gpt-4o-mini-2024-07-18:free",
-    "meta-llama/llama-3.1-8b-instruct:free"
+    "google/gemini-flash-1.5-8b",
+    "openai/gpt-4o-mini",
+    "meta-llama/llama-3.1-8b-instruct"
 ]
 
 # -------------- 유틸 함수 --------------
@@ -90,21 +91,22 @@ def get_best_sales_script(selected_topic):
             print(f"⚠️ AI 실패: {e}")
             time.sleep(2)
 
+    # [수정] 비상 대본 로직: 형식 오류(IndexError) 방지 추가
     print("🚨 비상 대본을 사용합니다.")
     emergency_list = get_list_from_file(EMERGENCY_FILE)
-    if not emergency_list:
-        return "Control their mind before they control yours.", "Are you the hunter?", "#darkpsychology"
-
-    chosen = random.choice(emergency_list)
-    e_parts = chosen.split('|')
-    script = e_parts[0].strip().replace('"','')
     
-    used_scripts.append(script)
-    save_json(USED_SCRIPTS_FILE, used_scripts)
-    emergency_list.remove(chosen)
-    save_list_to_file(EMERGENCY_FILE, emergency_list)
+    if emergency_list:
+        for chosen in emergency_list:
+            e_parts = chosen.split('|')
+            if len(e_parts) >= 3: # 형식이 맞는 줄만 처리
+                script = e_parts[0].strip().replace('"','')
+                used_scripts.append(script)
+                save_json(USED_SCRIPTS_FILE, used_scripts)
+                emergency_list.remove(chosen)
+                save_list_to_file(EMERGENCY_FILE, emergency_list)
+                return script, e_parts[1].strip(), e_parts[2].strip()
     
-    return script, e_parts[1].strip(), e_parts[2].strip()
+    return "Master your mind, master your life.", "Are you the hunter or the prey?", "#darkpsychology #success"
 
 # -------------- 영상 제작 --------------
 def create_video(script):
@@ -169,7 +171,7 @@ def update_topics_with_new_ideas(current_topic):
         save_list_to_file(TOPIC_FILE, topics)
     except: pass
 
-# -------------- 실행 함수 (여기가 에러 해결 포인트!) --------------
+# -------------- 실행 함수 --------------
 def run_reels_bot():
     print("🚀 봇 실행 시작")
     if not os.path.exists("background.mp4"): 
