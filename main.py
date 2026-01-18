@@ -65,33 +65,63 @@ def get_best_sales_script(selected_topic):
     used_scripts = load_json(USED_SCRIPTS_FILE, [])
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     
+    # AI 명령 수정: 형식(Script|Caption|Hashtags)을 명확하게 지시
     prompt_content = (
         f"Role: High-status Dark Psychology master for the elite 1%.\n"
         f"Topic: {selected_topic}.\n\n"
-        "Task: Write a viral 15-word Instagram Reel script.\n"
-        "1. Hook: Start with a 'gut-punch' that shatters ego.\n"
-        "2. Paradoxical Hope: Reveal a 'forbidden' psychological weapon.\n"
-        "3. Tone: Cold, superior, predatory.\n"
-        "4. Constraint: Exactly one sentence. No emojis. No hashtags.\n"
+        "Task: Create viral Instagram Reel content.\n"
+        "1. Video Script: A cold, predatory one-sentence hook (No emojis).\n"
+        "2. Instagram Caption: One intriguing question for the audience.\n"
+        "3. Hashtags: 10 viral dark psychology hashtags.\n"
+        "IMPORTANT: You must return the result exactly in this format: [Script] | [Caption] | [Hashtags]"
     )
 
-    print(f"🤖 AI 대본 생성 중... (주제: {selected_topic})")
-    
-    while True:
+    # 최대 3번까지 AI 시도
+    for attempt in range(3):
         model = random.choice(AI_MODELS)
         try:
-            resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt_content}])
-            script = safe_extract_text_from_openai_response(resp).replace('"','').strip()
+            print(f"🤖 AI 시도 중... (시도 {attempt+1}/3, 모델: {model})")
+            resp = client.chat.completions.create(
+                model=model, 
+                messages=[{"role":"user","content":prompt_content}],
+                timeout=30 
+            )
+            raw_data = safe_extract_text_from_openai_response(resp)
             
-            if script and len(script) > 12 and script not in used_scripts:
-                used_scripts.append(script)
-                save_json(USED_SCRIPTS_FILE, used_scripts)
-                print(f"✨ 새 대본 확정: {script}")
-                return script
-            print(f"🔄 중복 발생 또는 부적절한 대본, 재시도 중...")
-        except:
+            # AI 응답을 '|' 기준으로 분리
+            parts = raw_data.split('|')
+            
+            if len(parts) >= 3:
+                script = parts[0].strip().replace('"','')
+                caption = parts[1].strip()
+                hashtags = parts[2].strip()
+                
+                if script not in used_scripts:
+                    used_scripts.append(script)
+                    save_json(USED_SCRIPTS_FILE, used_scripts)
+                    print(f"✨ 새 대본 확정: {script}")
+                    return script, caption, hashtags
+            
+            print(f"🔄 AI가 형식을 지키지 않음. 다시 시도합니다.")
+        except Exception as e:
+            print(f"⚠️ AI 시도 실패: {e}")
             time.sleep(2)
 
+    # --- AI가 3번 모두 실패했을 때 실행되는 비상 로직 ---
+    print("🚨 AI 응답 실패. 비상 대본(Emergency Scripts)을 사용합니다.")
+    emergency_list = get_list_from_file(EMERGENCY_FILE)
+    
+    if not emergency_list:
+        # 비상 파일이 없을 때를 대비한 최후의 보루
+        return "Control their mind before they control yours.", "Are you the hunter or the prey?", "#darkpsychology #power"
+
+    chosen = random.choice(emergency_list)
+    try:
+        e_parts = chosen.split('|')
+        return e_parts[0].strip(), e_parts[1].strip(), e_parts[2].strip()
+    except:
+        return chosen.strip(), "Master your mind.", "#darkpsychology #success"
+   
 def update_topics_with_new_ideas(current_topic):
     """현재 주제를 바탕으로 새로운 주제 5개를 추가함 (기존 주제 삭제 안함)"""
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
@@ -171,7 +201,7 @@ def post_to_instagram(video_url, caption):
 def run_reels_bot():
     if not os.path.exists("background.mp4"): return
     
-    # 1. 주제 선택 (기본값 제거, 파일에서만 가져옴)
+    # 1. 주제 선택
     topics = get_list_from_file(TOPIC_FILE)
     if not topics:
         print("❌ topics.txt 파일이 비어있습니다.")
@@ -180,18 +210,25 @@ def run_reels_bot():
     selected_topic = random.choice(topics)
     print(f"🎯 선택된 주제: {selected_topic}")
     
-    # 2. 대본 생성 및 영상 제작
-    script = get_best_sales_script(selected_topic)
+    # 2. 대본, 캡션, 해시태그 생성 (수정된 부분: 3개 변수로 받음)
+    script, caption, hashtags = get_best_sales_script(selected_topic)
+    
+    # 3. 영상 제작 (영상 안에는 'script'만 자막으로 들어감)
     final_video = create_video(script)
 
     if final_video:
         p_url = gh_pages_publish(final_video)
         if p_url:
+            print("⏳ 인스타그램 서버 업로드 대기 중 (60초)...")
             time.sleep(60)
-            if post_to_instagram(p_url, f"{script}\n\n{HASHTAGS}"):
-                print("✅ 업로드 완료!")
-                # 3. 새로운 주제 보충 (기존 주제는 유지)
+            
+            # 4. 인스타그램 게시 (AI가 만든 캡션과 해시태그 사용)
+            # 형식: [AI 질문 캡션]
+            #       .
+            #       [AI 해시태그]
+            full_caption = f"{caption}\n.\n.\n{hashtags}"
+            
+            if post_to_instagram(p_url, full_caption):
+                print(f"✅ 업로드 완료! (사용한 캡션: {caption})")
+                # 5. 새로운 주제 보충
                 update_topics_with_new_ideas(selected_topic)
-
-if __name__ == "__main__":
-    run_reels_bot()
