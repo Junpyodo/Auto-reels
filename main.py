@@ -5,6 +5,7 @@ import json
 import traceback
 import requests
 import subprocess
+import re
 from openai import OpenAI
 # [수정] AudioFileClip 추가
 from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip, AudioFileClip
@@ -154,6 +155,11 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
         return random.choice(e_scripts), True
 
     used_scripts = load_json(USED_SCRIPTS_FILE, [])
+    
+    def normalize(text):
+        return re.sub(r'[^a-zA-Z0-9]', '', text).lower()
+
+    normalized_used_scripts = [normalize(s) for s in used_scripts]
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     
     prompt_content = f"""
@@ -167,53 +173,48 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
     - Tone: Cold, authoritative, and mysterious. Avoid clichés like "believe in yourself" or "work hard".
     - Structure: A powerful statement that makes the viewer feel they are missing out or being lied to.
     
-    Example Style: 
-    - "Your friends don't want you to succeed; they want you to stay relatable."
-    - "The 1% don't compete; they control the environment while you play the game."
-    
     Provide ONLY the script. No quotes, no intro.
     """
 
-    print("🤖 강화된 AI 대본 생성 시도 중...")
+    print(f"🤖 중복 체크 모드 가동 (현재 저장된 대본: {len(used_scripts)}개)")
+    
     for model in AI_MODELS:
         for attempt in range(max_attempts_per_model):
             try:
-                time.sleep(1)
+                time.sleep(1.2)
                 resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt_content}])
                 raw_script = safe_extract_text_from_openai_response(resp)
                 
-                script = raw_script.replace('Script:', '').replace('Sentence:', '').replace('"', '').strip()
-                if not script or len(script) < 10: continue
+                if not raw_script: continue
                 
-                script = script.split('\n')[0].strip()
-
-                clean_comparison = script.lower().replace(" ", "").replace("'", "").replace('"', '').rstrip('.')
+                script = raw_script.split('\n')[0].strip().replace('"', '')
+                current_norm = normalize(script)
                 
-                is_duplicate = False
-                for u in used_scripts:
-                    if clean_comparison == u.lower().replace(" ", "").replace("'", "").replace('"', '').rstrip('.'):
-                        is_duplicate = True
-                        break
+                if current_norm in normalized_used_scripts:
+                    print(f"🚫 중복 감지 및 차단 ({model}): {script[:30]}...")
+                    continue 
                 
-                if is_duplicate:
-                    print(f"⚠️ 중복 대본 발견 ({model}) - 다시 생성합니다.")
+                if len(current_norm) < 15:
                     continue
-                
-                print(f"✨ [새 대본 확정] 모델: {model}\n내용: {script}")
+
+                print(f"✨ [신규 대본 확정] 모델: {model}\n내용: {script}")
                 used_scripts.append(script)
                 save_json(USED_SCRIPTS_FILE, used_scripts)
                 return script, False
-            # --- [수정 구간] SyntaxError 해결을 위해 except 블록 추가 ---
+                
             except Exception as e:
-                print(f"⚠️ {model} 생성 실패 (시도 {attempt+1}): {e}")
-                continue 
+                print(f"⚠️ {model} 에러: {e}")
+                continue
 
-    print("🆘 모든 모델 실패 — 비상 대본 사용")
-    e_scripts = get_list_from_file(EMERGENCY_FILE, ["The 1% don't sleep until the job is done."])
-    chosen = random.choice(e_scripts)
-    used = load_json(USED_SCRIPTS_FILE, [])
-    used.append(chosen)
-    save_json(USED_SCRIPTS_FILE, used)
+    # 모든 AI 모델이 실패하거나 중복만 생성할 경우
+    print("🆘 모든 모델 중복 또는 실패 — 비상 대본 사용")
+    e_scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence."])
+    fresh_emergency = [s for s in e_scripts if normalize(s) not in normalized_used_scripts]
+    
+    chosen = random.choice(fresh_emergency) if fresh_emergency else random.choice(e_scripts)
+    
+    used_scripts.append(chosen)
+    save_json(USED_SCRIPTS_FILE, used_scripts)
     return chosen, True
 
 # -------------- 업로드 관련 (기존과 동일) --------------
