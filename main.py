@@ -57,10 +57,10 @@ def get_best_sales_script(selected_topic):
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     
     prompt_content = (
-        f"Role: You are a high-level manipulator and master of Dark Psychology, writing for the elite 1% who seek power.\n"
+        f"Role: You are a high-level manipulator and master of Dark Psychology, writing for the elite 1% who seek power, success, and money.\n"
         f"Topic: {selected_topic}.\n\n"
         "Task: Create viral Instagram Reel content structure:\n"
-        "1. Video Script: A 'Cold Hook' triggering immediate curiosity/fear. No emojis. One punchy sentence.\n"
+        "1. Video Script: A 'Cold Hook' triggering immediate curiosity/fear and giving people hope that they can also be rich by doing so. They must also feel that they now found out the secret that other rich people are already doing No emojis. Some punchy sentences.\n"
         "2. Instagram Caption: A psychological 'open loop' question forcing comments.\n"
         "3. Hashtags: 10 viral dark psychology hashtags.\n\n"
         "Tone: Cold, mysterious, superior. Avoid clichés.\n"
