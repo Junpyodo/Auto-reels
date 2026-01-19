@@ -208,7 +208,7 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
 
     print(f"🤖 중복 체크 모드 가동 (현재 저장된 대본: {len(used_scripts)}개)")
     
-for model in AI_MODELS:
+    for model in AI_MODELS:
         for attempt in range(max_attempts_per_model):
             try:
                 time.sleep(1.2)
@@ -218,45 +218,45 @@ for model in AI_MODELS:
                     temperature=0.95
                 )
                 raw_script = safe_extract_text_from_openai_response(resp)
-                
+                    
                 if not raw_script: continue
-                
+                    
                 script = raw_script.split('\n')[0].strip().replace('"', '')
                 current_norm = normalize(script)
-                
+                    
                 if current_norm in normalized_used_scripts:
                     print(f"🚫 중복 감지 및 차단 ({model}): {script[:30]}...")
                     continue 
-                
+                    
                 if len(current_norm) < 15:
                     continue
-
+    
                 print(f"✨ [신규 대본 확정] 모델: {model}\n내용: {script}")
                 used_scripts.append(script)
                 save_json(USED_SCRIPTS_FILE, used_scripts)
                 return script, False
-                
+                    
             except Exception as e:
                 print(f"⚠️ {model} 에러: {e}")
                 continue
-
-    print("🆘 모든 모델 중복 또는 실패 — 비상 대본 사용")
-    e_scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence."])
     
-    fresh_emergency = [s for s in e_scripts if normalize(s) not in normalized_used_scripts]
-    
-    if fresh_emergency:
-        chosen = random.choice(fresh_emergency)
-    
-    # 비상 대본도 다 썼을 때를 위한 최후의 한 문장
-    else:
-        chosen = "Privacy is power. What they don't know, they can't ruin."
-    
-    print(f"⚠️ 선택된 대본: {chosen}")
-    
-    used_scripts.append(chosen)
-    save_json(USED_SCRIPTS_FILE, used_scripts)
-    return chosen, True
+        print("🆘 모든 모델 중복 또는 실패 — 비상 대본 사용")
+        e_scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence."])
+        
+        fresh_emergency = [s for s in e_scripts if normalize(s) not in normalized_used_scripts]
+        
+        if fresh_emergency:
+            chosen = random.choice(fresh_emergency)
+        
+        # 비상 대본도 다 썼을 때를 위한 최후의 한 문장
+        else:
+            chosen = "Privacy is power. What they don't know, they can't ruin."
+        
+        print(f"⚠️ 선택된 대본: {chosen}")
+        
+        used_scripts.append(chosen)
+        save_json(USED_SCRIPTS_FILE, used_scripts)
+        return chosen, True
 
 # -------------- 업로드 관련 (기존과 동일) --------------
 def upload_to_0x0(file_path, max_attempts=2):
