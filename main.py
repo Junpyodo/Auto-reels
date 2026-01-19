@@ -95,8 +95,28 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
                     script = safe_extract_text_from_openai_response(resp).split('\n')[0].strip().replace('"', '')
                     
                     if normalize(script) not in normalized_used_scripts and len(script) > 10:
+                        # [핵심] 성공 기록 저장
                         used_scripts.append(script)
                         save_json(USED_SCRIPTS_FILE, used_scripts)
+
+                        # [핵심] 성공했으니 추가로 3개 더 만들어서 비상 파일에 저축
+                        try:
+                            print("📦 미래를 위해 비상 대본을 비축합니다...")
+                            backup_prompt = f"Write 3 more different viral sentences about {selected_topic} in the same mysterious style. No quotes."
+                            backup_resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":backup_prompt}], temperature=1.0)
+                            backups = safe_extract_text_from_openai_response(backup_resp).split('\n')
+                            
+                            existing_emergencies = [normalize(line) for line in get_list_from_file(EMERGENCY_FILE, [])]
+                            
+                            with open(EMERGENCY_FILE, "a", encoding="utf-8") as f:
+                                for b in backups:
+                                    b = b.strip().replace('"', '')
+                                    if b and normalize(b) not in normalized_used_scripts and normalize(b) not in existing_emergencies and len(b) > 10:
+                                        f.write(b + "\n")
+                            print("✅ 비상 대본 비축 완료")
+                        except Exception as backup_e:
+                            print(f"⚠️ 비상 비축 실패: {backup_e}")
+
                         print(f"✨ AI 성공: {script}")
                         return script, False
                 except: continue
