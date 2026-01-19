@@ -269,5 +269,25 @@ def run_reels_bot():
             update_topics_list(selected_topic)
             update_emergency_scripts(selected_topic)
 
+def delete_from_gh_pages(file_name):
+    if not GITHUB_TOKEN: return
+    try:
+        workdir = "/tmp/ghpages_cleanup"
+        repo_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{GITHUB_ID}/{REPO_NAME}.git"
+        
+        subprocess.run(["rm", "-rf", workdir], check=False)
+        subprocess.run(["git", "clone", "--depth", "1", "-b", "gh-pages", repo_url, workdir], check=True)
+        
+        target_path = os.path.join(workdir, file_name)
+        if os.path.exists(target_path):
+            subprocess.run(["git", "rm", file_name], cwd=workdir, check=True)
+            subprocess.run(["git", "config", "user.name", "github-actions[bot]"], cwd=workdir)
+            subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], cwd=workdir)
+            subprocess.run(["git", "commit", "-m", "🗑️ Remove temporary reel video"], cwd=workdir, check=True)
+            subprocess.run(["git", "push", "origin", "gh-pages"], cwd=workdir, check=True)
+            print(f"🗑️ 깃허브에서 {file_name} 삭제 완료!")
+    except Exception as e:
+        print(f"❌ 삭제 작업 중 오류 발생: {e}")
+
 if __name__ == "__main__":
     run_reels_bot()
