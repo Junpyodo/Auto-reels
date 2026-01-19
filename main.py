@@ -40,7 +40,10 @@ AI_MODELS = [
     "meta-llama/llama-3.1-8b-instruct:free"
 ]
 
-# -------------- 유틸 (기존과 동일) --------------
+# -------------- 유틸 --------------
+def normalize(text):
+    return re.sub(r'[^a-zA-Z0-9]', '', text).lower()
+
 def get_list_from_file(file_path, default_values):
     if not os.path.exists(file_path):
         with open(file_path, "w", encoding="utf-8") as f:
@@ -87,11 +90,8 @@ def safe_extract_text_from_openai_response(resp):
         pass
     return ""
 
-# -------------- AI 관련 (기존과 동일) --------------
+# -------------- AI 관련 --------------
 def update_emergency_scripts(current_topic=None, used_script=None):
-    def normalize(text):
-        return re.sub(r'[^a-zA-Z0-9]', '', text).lower()
-        
     scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence.", "Success is the best revenge."])
     
     if used_script:
@@ -104,19 +104,7 @@ def update_emergency_scripts(current_topic=None, used_script=None):
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     
     topic_str = f"based on the topic '{current_topic}'" if current_topic else "about dark psychology and wealth"
-    prompt_content = f"""
-    Topic: {selected_topic}
-    Role: You are a viral content creator specializing in Dark Psychology and Wealth Mindset that knows secret which only rich people knows.
-    Objective: Create a script for a viral Instagram Reel. (can be a bullet point style. like, top 5 things only rich knows...). After seeing this they must feel like they must buy the thing in my bio.
-    
-    Guidelines:
-    - Use the "Pattern Interrupt" technique: Start with a shocking truth or a counter-intuitive statement.
-    - Focus on high-status, dark psychology, or "the hidden secrets of the 1%".
-    - Tone: Cold, authoritative, and mysterious. Avoid clichés like "believe in yourself" or "work hard".
-    - Structure: A powerful statement that makes the viewer feel they are missing out or being lied to.
-    
-    Provide ONLY the script. No quotes, no intro.
-    """
+    prompt = f"Generate 10 powerful, viral 20-word scripts for Instagram Reels {topic_str}. One per line. No numbers, no quotes."
 
     for model in AI_MODELS:
         try:
@@ -133,36 +121,6 @@ def update_emergency_scripts(current_topic=None, used_script=None):
         except: continue
     save_list_to_file(EMERGENCY_FILE, scripts)
     print("⚠️ 모든 모델 실패 — emergency 리스트는 유지됨")
-
-# ... (AI 모델 반복문 종료 후) ...
-
-    # 모든 AI 모델이 실패하거나 중복만 생성할 경우 비상 대본 섹션
-    print("🆘 모든 AI 모델이 중복을 생성함. 비상 대본 중에서 미사용본 탐색 중...")
-    e_scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence."])
-    
-    # [강화된 로직] 사용하지 않은 비상 대본만 필터링
-    fresh_emergency = [s for s in e_scripts if normalize(s) not in normalized_used_scripts]
-    
-    if fresh_emergency:
-        chosen = random.choice(fresh_emergency)
-        print(f"⚠️ 비상 대본 사용: {chosen}")
-    else:
-        # 비상 대본까지 다 썼을 경우: 여기서 그냥 중복을 내보내면 영상이 똑같아짐
-        # 해결책: 강제로 아주 생소한 문장을 하나 생성하거나 에러를 발생시켜 중단
-        fallback_list = [
-            "Privacy is power. What they don't know, they can't ruin.",
-            "Don't go broke trying to look rich. Build in silence.",
-            "The best revenge is massive success and zero words."
-        ]
-        # fallback 중에서도 안 쓴 것 찾기
-        very_fresh = [s for s in fallback_list if normalize(s) not in normalized_used_scripts]
-        chosen = random.choice(very_fresh) if very_fresh else "Time is the only asset you can't buy back."
-        print(f"🚨 최후의 보루 스크립트 사용: {chosen}")
-    
-    # 최종 선택된 대본 저장 (중요: 이래야 다음번에 또 안 씀)
-    used_scripts.append(chosen)
-    save_json(USED_SCRIPTS_FILE, used_scripts)
-    return chosen, True
 
 def update_topics_list(used_topic):
     if not OPENROUTER_API_KEY:
@@ -181,8 +139,7 @@ def update_topics_list(used_topic):
             time.sleep(1)
             resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt}])
             text = safe_extract_text_from_openai_response(resp)
-            if not text:
-                continue
+            if not text: continue
             new_topics = [line.strip() for line in text.split("\n") if line.strip()]
             if new_topics:
                 combined = list(dict.fromkeys(topics + new_topics))
@@ -195,27 +152,23 @@ def update_topics_list(used_topic):
     print("⚠️ 모든 모델 실패 — 주제 리스트 변경 안됨")
 
 def get_best_sales_script(selected_topic, max_attempts_per_model=2):
-    def normalize(text):
-        return re.sub(r'[^a-zA-Z0-9]', '', text).lower()
     if not OPENROUTER_API_KEY:
         e_scripts = get_list_from_file(EMERGENCY_FILE, ["The 1% don't sleep until the job is done."])
         return random.choice(e_scripts), True
 
     used_scripts = load_json(USED_SCRIPTS_FILE, [])
-    
     normalized_used_scripts = [normalize(s) for s in used_scripts]
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     
     prompt_content = f"""
     Topic: {selected_topic}
     Role: You are a viral content creator specializing in Dark Psychology and Wealth Mindset that knows secret which only rich people knows.
-    Objective: Create a script for a viral Instagram Reel. (can be a bullet point style. like, top 5 things only rich knows...). After seeing this they must feel like they must buy the thing in my bio.
+    Objective: Create a script for a viral Instagram Reel. After seeing this they must feel like they must buy the thing in my bio.
     
     Guidelines:
     - Use the "Pattern Interrupt" technique: Start with a shocking truth or a counter-intuitive statement.
     - Focus on high-status, dark psychology, or "the hidden secrets of the 1%".
     - Tone: Cold, authoritative, and mysterious. Avoid clichés like "believe in yourself" or "work hard".
-    - Structure: A powerful statement that makes the viewer feel they are missing out or being lied to.
     
     Provide ONLY the script. No quotes, no intro.
     """
@@ -232,7 +185,6 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
                     temperature=0.95
                 )
                 raw_script = safe_extract_text_from_openai_response(resp)
-                    
                 if not raw_script: continue
                     
                 script = raw_script.split('\n')[0].strip().replace('"', '')
@@ -254,25 +206,29 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
                 print(f"⚠️ {model} 에러: {e}")
                 continue
     
-        print("🆘 모든 모델 중복 또는 실패 — 비상 대본 사용")
-        e_scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence."])
-        
-        fresh_emergency = [s for s in e_scripts if normalize(s) not in normalized_used_scripts]
-        
-        if fresh_emergency:
-            chosen = random.choice(fresh_emergency)
-        
-        # 비상 대본도 다 썼을 때를 위한 최후의 한 문장
-        else:
-            chosen = "Privacy is power. What they don't know, they can't ruin."
-        
-        print(f"⚠️ 선택된 대본: {chosen}")
-        
-        used_scripts.append(chosen)
-        save_json(USED_SCRIPTS_FILE, used_scripts)
-        return chosen, True
+    # --- 모든 AI 실패 시 비상 대본 로직 (들여쓰기 수정 완료) ---
+    print("🆘 모든 AI 모델이 실패하거나 중복을 생성함. 비상 대본 탐색 중...")
+    e_scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence."])
+    fresh_emergency = [s for s in e_scripts if normalize(s) not in normalized_used_scripts]
+    
+    if fresh_emergency:
+        chosen = random.choice(fresh_emergency)
+        print(f"⚠️ 비상 대본 사용: {chosen}")
+    else:
+        fallback_list = [
+            "Privacy is power. What they don't know, they can't ruin.",
+            "Don't go broke trying to look rich. Build in silence.",
+            "The best revenge is massive success and zero words."
+        ]
+        very_fresh = [s for s in fallback_list if normalize(s) not in normalized_used_scripts]
+        chosen = random.choice(very_fresh) if very_fresh else "Time is the only asset you can't buy back."
+        print(f"🚨 최후의 보루 스크립트 사용: {chosen}")
+    
+    used_scripts.append(chosen)
+    save_json(USED_SCRIPTS_FILE, used_scripts)
+    return chosen, True
 
-# -------------- 업로드 관련 (기존과 동일) --------------
+# -------------- 업로드 관련 --------------
 def upload_to_0x0(file_path, max_attempts=2):
     url = "https://0x0.st"
     for attempt in range(max_attempts):
@@ -350,8 +306,7 @@ def upload_video_and_get_public_url(file_path):
             print("⚠️ S3 업로드 예외:", e)
 
     gh_url = gh_pages_publish(file_path)
-    if gh_url:
-        return gh_url
+    if gh_url: return gh_url
 
     print("🔼 0x0.st 업로드 시도...")
     url = upload_to_0x0(file_path)
@@ -364,13 +319,10 @@ def upload_video_and_get_public_url(file_path):
     print("❌ 공개 URL 생성 실패")
     return None
 
-# -------------- Instagram 업로드 (기존과 동일) --------------
+# -------------- Instagram 업로드 --------------
 def post_to_instagram(video_url, caption, api_version="v19.0"):
-    ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
-    ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID")
-
     if not ACCESS_TOKEN or not ACCOUNT_ID:
-        print("❌ INSTAGRAM_ACCESS_TOKEN 또는 INSTAGRAM_ACCOUNT_ID가 설정되어 있지 않습니다.")
+        print("❌ INSTAGRAM_ACCESS_TOKEN 또는 INSTAGRAM_ACCOUNT_ID 미설정.")
         return False
 
     print("📤 인스타 업로드 시도. URL:", video_url)
@@ -391,7 +343,6 @@ def post_to_instagram(video_url, caption, api_version="v19.0"):
             return False
             
         creation_id = res.get("id")
-        print("⏳ 인스타그램 서버에서 영상 처리 상태 확인 중...")
         status_url = f"https://graph.facebook.com/{api_version}/{creation_id}"
         status_params = {'fields': 'status_code', 'access_token': ACCESS_TOKEN}
         
@@ -401,11 +352,8 @@ def post_to_instagram(video_url, caption, api_version="v19.0"):
             status_res = check_r.json()
             status_code = status_res.get("status_code", "").upper()
             print(f"   - 상태 확인 ({i+1}/20): {status_code}")
-            if status_code == "FINISHED":
-                break
-            elif status_code == "ERROR":
-                print("❌ 영상 처리 중 에러 발생:", status_res)
-                return False
+            if status_code == "FINISHED": break
+            elif status_code == "ERROR": return False
 
         publish_url = f"https://graph.facebook.com/{api_version}/{ACCOUNT_ID}/media_publish"
         publish_payload = {'creation_id': creation_id, 'access_token': ACCESS_TOKEN}
@@ -413,16 +361,15 @@ def post_to_instagram(video_url, caption, api_version="v19.0"):
         pub_res = r_pub.json()
         
         if 'id' in pub_res:
-            print("🎉 업로드 성공! 게시물 ID:", pub_res.get("id"))
+            print("🎉 업로드 성공! ID:", pub_res.get("id"))
             return True
         else:
-            print("❌ 최종 게시 실패:", pub_res)
             return False
     except Exception as e:
         print("❌ API 예외 발생:", e)
         return False
 
-# -------------- 메인 흐름 (음악 추가 부분 적용) --------------
+# -------------- 메인 흐름 --------------
 def run_reels_bot():
     if not os.path.exists("background.mp4"):
         print("❌ background.mp4 파일이 필요합니다.")
@@ -448,15 +395,13 @@ def run_reels_bot():
         audio_success = False
         if os.path.exists("music.mp3"):
             try:
-                print("🎵 음악 합성 중 (music.mp3)...")
+                print("🎵 음악 합성 중...")
                 music = AudioFileClip("music.mp3").subclip(0, 8) 
                 final = final.set_audio(music)
                 audio_success = True
             except Exception as ae:
-                print(f"⚠️ 음악 추가 중 오류 발생 (무음으로 계속): {ae}")
-        else:
-            print("ℹ️ music.mp3 파일이 없어 음악 없이 제작합니다.")
-
+                print(f"⚠️ 음악 오류: {ae}")
+        
         final_video_name = "reels_video.mp4"
         final.write_videofile(final_video_name, fps=24, codec="libx264", audio=audio_success)
         
@@ -465,24 +410,22 @@ def run_reels_bot():
         return
 
     public_url = upload_video_and_get_public_url(final_video_name)
-    if not public_url:
-        print("❌ 공개 URL 생성 실패.")
-        return
+    if not public_url: return
 
-    print("⏳ 배포 안정화를 위해 60초 대기 후 인스타그램 전송을 시작합니다...")
+    print("⏳ 60초 대기 후 인스타그램 전송...")
     time.sleep(60)
 
     success = post_to_instagram(public_url, final_caption)
     
     if success:
-        print("✅ 모든 프로세스가 성공적으로 완료되었습니다!")
+        print("✅ 성공!")
         if is_emergency:
             update_emergency_scripts(current_topic=selected_topic, used_script=script)
         else:
             update_topics_list(used_topic=selected_topic)
             update_emergency_scripts(current_topic=selected_topic)
     else:
-        print("⚠️ 업로드 실패. 로그를 확인해 주세요.")
+        print("⚠️ 실패.")
 
 if __name__ == "__main__":
     run_reels_bot()
