@@ -243,6 +243,7 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
     # 모든 AI 모델이 실패하거나 중복만 생성할 경우
     print("🆘 모든 모델 중복 또는 실패 — 비상 대본 사용")
     e_scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence."])
+    
     fresh_emergency = [s for s in e_scripts if normalize(s) not in normalized_used_scripts]
     
     if fresh_emergency:
