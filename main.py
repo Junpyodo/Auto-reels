@@ -230,16 +230,20 @@ def post_to_instagram(video_url, caption):
 
 # -------------- 메인 흐름 (문구 교체 핵심 수정 버전) --------------
 def run_reels_bot():
-    # 1. 파일명 고유화 (가장 중요!)
-    # 매 실행마다 reels_17123456.mp4 처럼 이름이 달라져야 인스타 캐시를 피합니다.
-    timestamp = int(time.time())
-    final_video_name = f"reels_{timestamp}.mp4"
+    # --- [수정 포인트: 일련번호 로직] ---
+    # 사용된 대본 리스트(USED_SCRIPTS_FILE)의 개수를 파악하여 다음 번호를 결정합니다.
+    used_scripts = load_json(USED_SCRIPTS_FILE, [])
+    current_index = len(used_scripts) + 1
+    final_video_name = f"reels_{current_index}.mp4"
     
-    # 작업 시작 전, 혹시 남아있을지 모르는 mp4 파일들 모두 삭제
+    # 1. 로컬 환경 청소
+    # 이전 실행에서 남았을지 모르는 모든 reels_*.mp4 파일을 삭제합니다.
     for f in os.listdir("."):
         if f.startswith("reels_") and f.endswith(".mp4"):
-            try: os.remove(f)
-            except: pass
+            try:
+                os.remove(f)
+            except:
+                pass
 
     if not os.path.exists("background.mp4"): 
         print("❌ background.mp4 파일이 없습니다.")
@@ -248,17 +252,19 @@ def run_reels_bot():
     # 2. 주제 선정 및 대본 생성
     topics = get_list_from_file(TOPIC_FILE, ["Dark psychology of wealth"])
     selected_topic = random.choice(topics)
+    
+    # get_best_sales_script는 사용자가 정의한 함수를 그대로 호출합니다.
     script, is_emergency = get_best_sales_script(selected_topic)
     
-    # 캡션 구성 (대본 + 고정문구 + 해시태그)
+    # 캡션 구성
     final_caption = f"{script}\n{MY_IDENTITY_CAPTION}\n{HASHTAGS}"
 
-    # 3. 영상 편집 (영상의 '글귀'를 새로 생성)
+    # 3. 영상 제작
     try:
-        print(f"🎬 새 문구로 영상 제작 중: {script[:20]}...")
+        print(f"🎬 {current_index}번째 영상 제작 중: {script[:20]}...")
         video = VideoFileClip("background.mp4").subclip(0, 8).fx(vfx.colorx, 0.25)
         
-        # 여기서 script 변수가 영상 중앙에 박힙니다.
+        # script 변수가 영상 중앙에 정확히 박힙니다.
         txt = TextClip(script, fontsize=45, color='white', size=(int(video.w*0.85), None),
                        font='DejaVu-Sans-Bold', method='caption', align='center',
                        stroke_color='black', stroke_width=1.5).set_duration(8).set_pos('center')
@@ -267,15 +273,16 @@ def run_reels_bot():
         if os.path.exists("music.mp3"):
             final = final.set_audio(AudioFileClip("music.mp3").subclip(0, 8))
         
-        # 고유한 파일명으로 저장
+        # 일련번호가 붙은 파일명으로 저장
         final.write_videofile(final_video_name, fps=24, codec="libx264")
     except Exception as e:
         print(f"❌ 영상 제작 에러: {e}")
         return
 
-    # 4. 깃허브 업로드 (고유한 파일명이 깃허브에 올라감)
-    # 예: https://Junpyodo.github.io/Auto-reels/reels_17123456.mp4
-    public_url = upload_video_and_get_public_url(final_video_name)
+    # 4. 깃허브 업로드
+    # NameError 방지를 위해 upload_video_and_get_public_url 함수 내에서 
+    # 정의되지 않은 S3 관련 코드를 지우고 gh_pages_publish를 직접 호출하는 것이 안전합니다.
+    public_url = gh_pages_publish(final_video_name)
     if not public_url:
         print("❌ 업로드 URL 생성 실패")
         return
@@ -286,11 +293,12 @@ def run_reels_bot():
 
     # 5. 인스타그램 포스팅
     if post_to_instagram(public_url, final_caption):
-        print("🎉 인스타그램 업로드 성공!")
+        print(f"🎉 {current_index}번째 릴스 업로드 성공!")
         
-        # 6. 업로드 성공 후 깃허브에서 영상 삭제 (정리 로직 호출)
+        # 6. 업로드 성공 후 깃허브에서 영상 삭제 (정리 로직)
         delete_from_gh_pages(final_video_name)
         
+        # 후처리 로직
         if is_emergency: 
             update_emergency_scripts(selected_topic, script)
         else:
