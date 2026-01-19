@@ -208,7 +208,7 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
 
     print(f"🤖 중복 체크 모드 가동 (현재 저장된 대본: {len(used_scripts)}개)")
     
-    for model in AI_MODELS:
+for model in AI_MODELS:
         for attempt in range(max_attempts_per_model):
             try:
                 time.sleep(1.2)
@@ -240,7 +240,6 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
                 print(f"⚠️ {model} 에러: {e}")
                 continue
 
-    # 모든 AI 모델이 실패하거나 중복만 생성할 경우
     print("🆘 모든 모델 중복 또는 실패 — 비상 대본 사용")
     e_scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence."])
     
