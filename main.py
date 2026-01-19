@@ -104,22 +104,79 @@ def delete_from_gh_pages(file_name):
             print(f"🗑️ {file_name} 삭제 완료")
     except: pass
 
-def post_to_instagram(video_url, caption):
-    if not ACCESS_TOKEN or not ACCOUNT_ID: return False
-    url = f"https://graph.facebook.com/v19.0/{ACCOUNT_ID}/media"
-    payload = {'media_type': 'REELS', 'video_url': video_url, 'caption': caption, 'access_token': ACCESS_TOKEN}
-    try:
-        r = requests.post(url, data=payload).json()
-        c_id = r.get("id")
-        if not c_id: return False
-        for _ in range(20):
-            time.sleep(10)
-            res = requests.get(f"https://graph.facebook.com/v19.0/{c_id}", params={'fields':'status_code','access_token':ACCESS_TOKEN}).json()
-            if res.get("status_code") == "FINISHED":
-                pub = requests.post(f"https://graph.facebook.com/v19.0/{ACCOUNT_ID}/media_publish", data={'creation_id':c_id, 'access_token':ACCESS_TOKEN}).json()
-                return "id" in pub
-    except: return False
-    return False
+def post_to_instagram(video_url, caption, api_version="v19.0"):
+    # 1. 환경 변수 로드 (함수 내 정의로 안전성 확보)
+    ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
+    ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID")
+
+    if not ACCESS_TOKEN or not ACCOUNT_ID:
+        print("❌ INSTAGRAM_ACCESS_TOKEN 또는 INSTAGRAM_ACCOUNT_ID가 설정되어 있지 않습니다.")
+        return False
+
+    print("📤 인스타 업로드 시도. URL:", video_url)
+    
+    # 2. 미디어 컨테이너 생성 주소
+    container_url = f"https://graph.facebook.com/{api_version}/{ACCOUNT_ID}/media"
+
+    payload = {
+        'media_type': 'REELS',
+        'video_url': video_url,
+        'caption': caption,
+        'share_to_feed': 'true', 
+        'access_token': ACCESS_TOKEN
+    }
+    
+    try:
+        # 3. 컨테이너 생성
+        r = requests.post(container_url, data=payload, timeout=30)
+        res = r.json()
+        print("▶ container create response:", res)
+        
+        if "id" not in res:
+            print("❌ 컨테이너 생성 실패:", res)
+            return False
+            
+        creation_id = res.get("id")
+
+        # 4. 폴링(Polling): 인스타그램 서버의 영상 처리 상태 확인
+        print("⏳ 인스타그램 서버에서 영상 처리 상태 확인 중...")
+        status_url = f"https://graph.facebook.com/{api_version}/{creation_id}"
+        status_params = {'fields': 'status_code', 'access_token': ACCESS_TOKEN}
+        
+        for i in range(20): # 최대 100초 (5초 * 20번)
+            time.sleep(5)
+            check_r = requests.get(status_url, params=status_params, timeout=30)
+            status_res = check_r.json()
+            status_code = status_res.get("status_code", "").upper()
+            
+            print(f"   - 상태 확인 ({i+1}/20): {status_code}")
+            if status_code == "FINISHED":
+                break
+            elif status_code == "ERROR":
+                print("❌ 영상 처리 중 에러 발생:", status_res)
+                return False
+
+        # 5. 최종 게시 (Publish)
+        print("🚀 영상 처리 완료. 최종 게시 중...")
+        publish_url = f"https://graph.facebook.com/{api_version}/{ACCOUNT_ID}/media_publish"
+        publish_payload = {
+            'creation_id': creation_id,
+            'access_token': ACCESS_TOKEN
+        }
+        
+        r_pub = requests.post(publish_url, data=publish_payload, timeout=30)
+        pub_res = r_pub.json()
+        
+        if 'id' in pub_res:
+            print("🎉 업로드 성공! 게시물 ID:", pub_res.get("id"))
+            return True
+        else:
+            print("❌ 최종 게시 실패:", pub_res)
+            return False
+
+    except Exception as e:
+        print("❌ API 예외 발생:", e)
+        return False
 
 # --- [메인 로봇 함수] ---
 def run_reels_bot():
