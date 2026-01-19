@@ -1,4 +1,3 @@
-# main.py
 import os
 import random
 import time
@@ -6,6 +5,7 @@ import json
 import traceback
 import requests
 import subprocess
+import re
 from openai import OpenAI
 # [수정] AudioFileClip 추가
 from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip, AudioFileClip
@@ -88,37 +88,81 @@ def safe_extract_text_from_openai_response(resp):
     return ""
 
 # -------------- AI 관련 (기존과 동일) --------------
-def update_emergency_scripts(used_script=None):
+def update_emergency_scripts(current_topic=None, used_script=None):
+    def normalize(text):
+        return re.sub(r'[^a-zA-Z0-9]', '', text).lower()
+        
     scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence.", "Success is the best revenge."])
-    if used_script and used_script in scripts:
-        scripts.remove(used_script)
+    
+    if used_script:
+        scripts = [s for s in scripts if s.strip().rstrip('.') != used_script.strip().rstrip('.')]
 
     if not OPENROUTER_API_KEY:
         save_list_to_file(EMERGENCY_FILE, scripts)
-        print("⚠️ OPENROUTER_API_KEY가 없습니다 — emergency 업데이트 건너뜀")
         return
 
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
-    prompt = "Generate 10 powerful, viral 20-word dark psychology scripts for Instagram Reels. One per line. No numbers."
+    
+    topic_str = f"based on the topic '{current_topic}'" if current_topic else "about dark psychology and wealth"
+    prompt_content = f"""
+    Topic: {selected_topic}
+    Role: You are a viral content creator specializing in Dark Psychology and Wealth Mindset that knows secret which only rich people knows.
+    Objective: Create a script for a viral Instagram Reel. (can be a bullet point style. like, top 5 things only rich knows...). After seeing this they must feel like they must buy the thing in my bio.
+    
+    Guidelines:
+    - Use the "Pattern Interrupt" technique: Start with a shocking truth or a counter-intuitive statement.
+    - Focus on high-status, dark psychology, or "the hidden secrets of the 1%".
+    - Tone: Cold, authoritative, and mysterious. Avoid clichés like "believe in yourself" or "work hard".
+    - Structure: A powerful statement that makes the viewer feel they are missing out or being lied to.
+    
+    Provide ONLY the script. No quotes, no intro.
+    """
 
     for model in AI_MODELS:
         try:
             time.sleep(1)
             resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt}])
             text = safe_extract_text_from_openai_response(resp)
-            if not text:
-                continue
-            new_list = [line.strip().replace('"','') for line in text.split("\n") if line.strip()]
+            if not text: continue
+            new_list = [line.strip().replace('"','') for line in text.split("\n") if len(line.strip()) > 5]
             if new_list:
                 combined = list(dict.fromkeys(scripts + new_list))
                 save_list_to_file(EMERGENCY_FILE, combined)
-                print(f"✅ 비상 대본 리스트 보충 완료 ({model})")
+                print(f"✅ 비상 대본 업데이트 완료 ({model})")
                 return
-        except Exception as e:
-            print(f"⚠️ update_emergency_scripts: {model} 실패: {e}")
-            continue
+        except: continue
     save_list_to_file(EMERGENCY_FILE, scripts)
     print("⚠️ 모든 모델 실패 — emergency 리스트는 유지됨")
+
+# ... (AI 모델 반복문 종료 후) ...
+
+    # 모든 AI 모델이 실패하거나 중복만 생성할 경우 비상 대본 섹션
+    print("🆘 모든 AI 모델이 중복을 생성함. 비상 대본 중에서 미사용본 탐색 중...")
+    e_scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence."])
+    
+    # [강화된 로직] 사용하지 않은 비상 대본만 필터링
+    fresh_emergency = [s for s in e_scripts if normalize(s) not in normalized_used_scripts]
+    
+    if fresh_emergency:
+        chosen = random.choice(fresh_emergency)
+        print(f"⚠️ 비상 대본 사용: {chosen}")
+    else:
+        # 비상 대본까지 다 썼을 경우: 여기서 그냥 중복을 내보내면 영상이 똑같아짐
+        # 해결책: 강제로 아주 생소한 문장을 하나 생성하거나 에러를 발생시켜 중단
+        fallback_list = [
+            "Privacy is power. What they don't know, they can't ruin.",
+            "Don't go broke trying to look rich. Build in silence.",
+            "The best revenge is massive success and zero words."
+        ]
+        # fallback 중에서도 안 쓴 것 찾기
+        very_fresh = [s for s in fallback_list if normalize(s) not in normalized_used_scripts]
+        chosen = random.choice(very_fresh) if very_fresh else "Time is the only asset you can't buy back."
+        print(f"🚨 최후의 보루 스크립트 사용: {chosen}")
+    
+    # 최종 선택된 대본 저장 (중요: 이래야 다음번에 또 안 씀)
+    used_scripts.append(chosen)
+    save_json(USED_SCRIPTS_FILE, used_scripts)
+    return chosen, True
 
 def update_topics_list(used_topic):
     if not OPENROUTER_API_KEY:
@@ -151,11 +195,15 @@ def update_topics_list(used_topic):
     print("⚠️ 모든 모델 실패 — 주제 리스트 변경 안됨")
 
 def get_best_sales_script(selected_topic, max_attempts_per_model=2):
+    def normalize(text):
+        return re.sub(r'[^a-zA-Z0-9]', '', text).lower()
     if not OPENROUTER_API_KEY:
         e_scripts = get_list_from_file(EMERGENCY_FILE, ["The 1% don't sleep until the job is done."])
         return random.choice(e_scripts), True
 
     used_scripts = load_json(USED_SCRIPTS_FILE, [])
+    
+    normalized_used_scripts = [normalize(s) for s in used_scripts]
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     
     prompt_content = f"""
@@ -169,43 +217,60 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
     - Tone: Cold, authoritative, and mysterious. Avoid clichés like "believe in yourself" or "work hard".
     - Structure: A powerful statement that makes the viewer feel they are missing out or being lied to.
     
-    Example Style: 
-    - "Your friends don't want you to succeed; they want you to stay relatable."
-    - "The 1% don't compete; they control the environment while you play the game."
-    
     Provide ONLY the script. No quotes, no intro.
     """
 
-    print("🤖 강화된 AI 대본 생성 시도 중...")
+    print(f"🤖 중복 체크 모드 가동 (현재 저장된 대본: {len(used_scripts)}개)")
+    
     for model in AI_MODELS:
         for attempt in range(max_attempts_per_model):
             try:
-                time.sleep(1 + attempt)
-                resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt_content}])
-                script = safe_extract_text_from_openai_response(resp).replace('"','').strip()
-                if not script:
+                time.sleep(1.2)
+                resp = client.chat.completions.create(
+                    model=model, 
+                    messages=[{"role":"user","content":prompt_content}],
+                    temperature=0.95
+                )
+                raw_script = safe_extract_text_from_openai_response(resp)
+                    
+                if not raw_script: continue
+                    
+                script = raw_script.split('\n')[0].strip().replace('"', '')
+                current_norm = normalize(script)
+                    
+                if current_norm in normalized_used_scripts:
+                    print(f"🚫 중복 감지 및 차단 ({model}): {script[:30]}...")
+                    continue 
+                    
+                if len(current_norm) < 15:
                     continue
-                script_line = script.split("\n")[0].strip()
-                if len(script_line) < 6:
-                    continue
-                if script_line in used_scripts:
-                    print("⚠️ 생성된 스크립트는 이미 사용됨 — 건너뜀")
-                    continue
-                print(f"✨ [AI 생성 성공] 모델: {model}")
-                used_scripts.append(script_line)
+    
+                print(f"✨ [신규 대본 확정] 모델: {model}\n내용: {script}")
+                used_scripts.append(script)
                 save_json(USED_SCRIPTS_FILE, used_scripts)
-                return script_line, False
+                return script, False
+                    
             except Exception as e:
-                print(f"⚠️ {model} 실패 (시도 {attempt+1}): {e}")
+                print(f"⚠️ {model} 에러: {e}")
                 continue
-
-    print("🆘 모든 모델 실패 — 비상 대본 사용")
-    e_scripts = get_list_from_file(EMERGENCY_FILE, ["The 1% don't sleep until the job is done."])
-    chosen = random.choice(e_scripts)
-    used = load_json(USED_SCRIPTS_FILE, [])
-    used.append(chosen)
-    save_json(USED_SCRIPTS_FILE, used)
-    return chosen, True
+    
+        print("🆘 모든 모델 중복 또는 실패 — 비상 대본 사용")
+        e_scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence."])
+        
+        fresh_emergency = [s for s in e_scripts if normalize(s) not in normalized_used_scripts]
+        
+        if fresh_emergency:
+            chosen = random.choice(fresh_emergency)
+        
+        # 비상 대본도 다 썼을 때를 위한 최후의 한 문장
+        else:
+            chosen = "Privacy is power. What they don't know, they can't ruin."
+        
+        print(f"⚠️ 선택된 대본: {chosen}")
+        
+        used_scripts.append(chosen)
+        save_json(USED_SCRIPTS_FILE, used_scripts)
+        return chosen, True
 
 # -------------- 업로드 관련 (기존과 동일) --------------
 def upload_to_0x0(file_path, max_attempts=2):
@@ -372,23 +437,19 @@ def run_reels_bot():
 
     try:
         print("🎬 영상 편집 시작...")
-        # 1. 배경 영상 로드 (8초)
         video = VideoFileClip("background.mp4").subclip(0,8).fx(vfx.colorx, 0.25)
         
-        # 2. 텍스트 클립 생성
         txt = TextClip(script, fontsize=45, color='white', size=(int(video.w*0.85), None),
                        font='DejaVu-Sans-Bold', method='caption', align='center',
                        interline=12, stroke_color='black', stroke_width=1.5).set_duration(8).set_pos('center')
         
-        # 3. 비디오 + 텍스트 합성
         final = CompositeVideoClip([video, txt])
         
-        # [추가] 4. 음악 추가 로직
         audio_success = False
         if os.path.exists("music.mp3"):
             try:
                 print("🎵 음악 합성 중 (music.mp3)...")
-                music = AudioFileClip("music.mp3").subclip(0, 8) # 영상 길이에 맞춤
+                music = AudioFileClip("music.mp3").subclip(0, 8) 
                 final = final.set_audio(music)
                 audio_success = True
             except Exception as ae:
@@ -397,7 +458,6 @@ def run_reels_bot():
             print("ℹ️ music.mp3 파일이 없어 음악 없이 제작합니다.")
 
         final_video_name = "reels_video.mp4"
-        # [수정] 오디오 유무에 따라 audio 파라미터 자동 조절
         final.write_videofile(final_video_name, fps=24, codec="libx264", audio=audio_success)
         
     except Exception as e:
@@ -413,17 +473,16 @@ def run_reels_bot():
     time.sleep(60)
 
     success = post_to_instagram(public_url, final_caption)
-
+    
     if success:
         print("✅ 모든 프로세스가 성공적으로 완료되었습니다!")
         if is_emergency:
-            update_emergency_scripts(used_script=script)
+            update_emergency_scripts(current_topic=selected_topic, used_script=script)
         else:
             update_topics_list(used_topic=selected_topic)
-            update_emergency_scripts()
+            update_emergency_scripts(current_topic=selected_topic)
     else:
         print("⚠️ 업로드 실패. 로그를 확인해 주세요.")
 
 if __name__ == "__main__":
-
     run_reels_bot()
