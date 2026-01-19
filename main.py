@@ -119,6 +119,36 @@ def update_emergency_scripts(current_topic=None, used_script=None):
     save_list_to_file(EMERGENCY_FILE, scripts)
     print("⚠️ 모든 모델 실패 — emergency 리스트는 유지됨")
 
+# ... (AI 모델 반복문 종료 후) ...
+
+    # 모든 AI 모델이 실패하거나 중복만 생성할 경우 비상 대본 섹션
+    print("🆘 모든 AI 모델이 중복을 생성함. 비상 대본 중에서 미사용본 탐색 중...")
+    e_scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence."])
+    
+    # [강화된 로직] 사용하지 않은 비상 대본만 필터링
+    fresh_emergency = [s for s in e_scripts if normalize(s) not in normalized_used_scripts]
+    
+    if fresh_emergency:
+        chosen = random.choice(fresh_emergency)
+        print(f"⚠️ 비상 대본 사용: {chosen}")
+    else:
+        # 비상 대본까지 다 썼을 경우: 여기서 그냥 중복을 내보내면 영상이 똑같아짐
+        # 해결책: 강제로 아주 생소한 문장을 하나 생성하거나 에러를 발생시켜 중단
+        fallback_list = [
+            "Privacy is power. What they don't know, they can't ruin.",
+            "Don't go broke trying to look rich. Build in silence.",
+            "The best revenge is massive success and zero words."
+        ]
+        # fallback 중에서도 안 쓴 것 찾기
+        very_fresh = [s for s in fallback_list if normalize(s) not in normalized_used_scripts]
+        chosen = random.choice(very_fresh) if very_fresh else "Time is the only asset you can't buy back."
+        print(f"🚨 최후의 보루 스크립트 사용: {chosen}")
+    
+    # 최종 선택된 대본 저장 (중요: 이래야 다음번에 또 안 씀)
+    used_scripts.append(chosen)
+    save_json(USED_SCRIPTS_FILE, used_scripts)
+    return chosen, True
+
 def update_topics_list(used_topic):
     if not OPENROUTER_API_KEY:
         print("⚠️ OPENROUTER_API_KEY가 없습니다 — 주제 업데이트 건너뜀")
@@ -182,7 +212,11 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
         for attempt in range(max_attempts_per_model):
             try:
                 time.sleep(1.2)
-                resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt_content}])
+                resp = client.chat.completions.create(
+                    model=model, 
+                    messages=[{"role":"user","content":prompt_content}],
+                    temperature=0.95
+                )
                 raw_script = safe_extract_text_from_openai_response(resp)
                 
                 if not raw_script: continue
@@ -211,7 +245,14 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
     e_scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence."])
     fresh_emergency = [s for s in e_scripts if normalize(s) not in normalized_used_scripts]
     
-    chosen = random.choice(fresh_emergency) if fresh_emergency else random.choice(e_scripts)
+    if fresh_emergency:
+        chosen = random.choice(fresh_emergency)
+    
+    # 비상 대본도 다 썼을 때를 위한 최후의 한 문장
+    else:
+        chosen = "Privacy is power. What they don't know, they can't ruin."
+    
+    print(f"⚠️ 선택된 대본: {chosen}")
     
     used_scripts.append(chosen)
     save_json(USED_SCRIPTS_FILE, used_scripts)
