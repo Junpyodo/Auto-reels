@@ -183,7 +183,7 @@ def run_reels_bot():
     # 1. 일련번호 생성 및 고유 숫자(타임스탬프) 결합
     used_scripts = load_json(USED_SCRIPTS_FILE, [])
     current_idx = len(used_scripts) + 1
-    # 파일 이름이 중복되지 않도록 현재 시간을 숫자로 추가합니다.
+    # 매 실행 시각을 숫자로 변환하여 파일명에 붙입니다. (캐시 방지)
     timestamp = int(time.time())
     final_video_name = f"reels_{current_idx}_{timestamp}.mp4"
     
@@ -212,7 +212,7 @@ def run_reels_bot():
         if os.path.exists("music.mp3"):
             final = final.set_audio(AudioFileClip("music.mp3").subclip(0, 8))
         
-        # 인스타그램 권장 오디오 코덱(aac) 명시 추가
+        # 인스타그램 권장 설정 적용
         final.write_videofile(final_video_name, fps=24, codec="libx264", audio_codec="aac")
     except Exception as e:
         print(f"❌ 영상 제작 에러: {e}"); return
@@ -231,6 +231,3 @@ def run_reels_bot():
         delete_from_gh_pages(final_video_name)
     else:
         print(f"❌ 인스타 포스팅 실패 (URL 확인: {public_url})")
-
-if __name__ == "__main__":
-    run_reels_bot()
