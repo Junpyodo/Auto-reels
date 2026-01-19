@@ -180,11 +180,14 @@ def post_to_instagram(video_url, caption, api_version="v19.0"):
 
 # --- [메인 로봇 함수] ---
 def run_reels_bot():
-    # 1. 일련번호 생성 (기존 대본 개수 기준)
+    # 1. 일련번호 생성 및 고유 숫자(타임스탬프) 결합
     used_scripts = load_json(USED_SCRIPTS_FILE, [])
     current_idx = len(used_scripts) + 1
-    final_video_name = f"reels_{current_idx}.mp4"
+    # 파일 이름이 중복되지 않도록 현재 시간을 숫자로 추가합니다.
+    timestamp = int(time.time())
+    final_video_name = f"reels_{current_idx}_{timestamp}.mp4"
     
+    # 기존에 남아있는 reels_ 관련 mp4 파일들 삭제
     for f in os.listdir("."):
         if f.startswith("reels_") and f.endswith(".mp4"):
             try: os.remove(f)
@@ -200,7 +203,7 @@ def run_reels_bot():
 
     # 3. 영상 제작
     try:
-        print(f"🎬 {current_idx}번째 영상 제작 중...")
+        print(f"🎬 {current_idx}번째 영상 제작 중 (파일명: {final_video_name})...")
         video = VideoFileClip("background.mp4").subclip(0, 8).fx(vfx.colorx, 0.25)
         txt = TextClip(script, fontsize=45, color='white', size=(int(video.w*0.85), None),
                        font='NanumGothic-Bold', method='caption', align='center',
@@ -208,7 +211,9 @@ def run_reels_bot():
         final = CompositeVideoClip([video, txt])
         if os.path.exists("music.mp3"):
             final = final.set_audio(AudioFileClip("music.mp3").subclip(0, 8))
-        final.write_videofile(final_video_name, fps=24, codec="libx264")
+        
+        # 인스타그램 권장 오디오 코덱(aac) 명시 추가
+        final.write_videofile(final_video_name, fps=24, codec="libx264", audio_codec="aac")
     except Exception as e:
         print(f"❌ 영상 제작 에러: {e}"); return
 
@@ -216,6 +221,7 @@ def run_reels_bot():
     public_url = gh_pages_publish(final_video_name)
     if not public_url: return
 
+    # 깃허브 페이지 배포 안정성을 위해 120초 대기
     print(f"⏳ 120초 대기... URL: {public_url}")
     time.sleep(120)
 
@@ -224,7 +230,7 @@ def run_reels_bot():
         print(f"🎉 {current_idx}번째 릴스 성공!")
         delete_from_gh_pages(final_video_name)
     else:
-        print("❌ 인스타 포스팅 실패")
+        print(f"❌ 인스타 포스팅 실패 (URL 확인: {public_url})")
 
 if __name__ == "__main__":
     run_reels_bot()
