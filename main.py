@@ -228,21 +228,37 @@ def post_to_instagram(video_url, caption):
     except: pass
     return False
 
-# -------------- 메인 흐름 --------------
+# -------------- 메인 흐름 (문구 교체 핵심 수정 버전) --------------
 def run_reels_bot():
-    final_video_name = "reels_video.mp4"
-    if os.path.exists(final_video_name):
-        os.remove(final_video_name)
+    # 1. 파일명 고유화 (가장 중요!)
+    # 매 실행마다 reels_17123456.mp4 처럼 이름이 달라져야 인스타 캐시를 피합니다.
+    timestamp = int(time.time())
+    final_video_name = f"reels_{timestamp}.mp4"
+    
+    # 작업 시작 전, 혹시 남아있을지 모르는 mp4 파일들 모두 삭제
+    for f in os.listdir("."):
+        if f.startswith("reels_") and f.endswith(".mp4"):
+            try: os.remove(f)
+            except: pass
 
-    if not os.path.exists("background.mp4"): return
+    if not os.path.exists("background.mp4"): 
+        print("❌ background.mp4 파일이 없습니다.")
+        return
 
+    # 2. 주제 선정 및 대본 생성
     topics = get_list_from_file(TOPIC_FILE, ["Dark psychology of wealth"])
     selected_topic = random.choice(topics)
     script, is_emergency = get_best_sales_script(selected_topic)
+    
+    # 캡션 구성 (대본 + 고정문구 + 해시태그)
     final_caption = f"{script}\n{MY_IDENTITY_CAPTION}\n{HASHTAGS}"
 
+    # 3. 영상 편집 (영상의 '글귀'를 새로 생성)
     try:
+        print(f"🎬 새 문구로 영상 제작 중: {script[:20]}...")
         video = VideoFileClip("background.mp4").subclip(0, 8).fx(vfx.colorx, 0.25)
+        
+        # 여기서 script 변수가 영상 중앙에 박힙니다.
         txt = TextClip(script, fontsize=45, color='white', size=(int(video.w*0.85), None),
                        font='DejaVu-Sans-Bold', method='caption', align='center',
                        stroke_color='black', stroke_width=1.5).set_duration(8).set_pos('center')
@@ -251,43 +267,34 @@ def run_reels_bot():
         if os.path.exists("music.mp3"):
             final = final.set_audio(AudioFileClip("music.mp3").subclip(0, 8))
         
+        # 고유한 파일명으로 저장
         final.write_videofile(final_video_name, fps=24, codec="libx264")
     except Exception as e:
-        print("❌ 제작 오류:", e)
+        print(f"❌ 영상 제작 에러: {e}")
         return
 
+    # 4. 깃허브 업로드 (고유한 파일명이 깃허브에 올라감)
+    # 예: https://Junpyodo.github.io/Auto-reels/reels_17123456.mp4
     public_url = upload_video_and_get_public_url(final_video_name)
-    if not public_url: return
+    if not public_url:
+        print("❌ 업로드 URL 생성 실패")
+        return
 
-    print("⏳ 대기 후 업로드...")
-    time.sleep(40)
+    print(f"🔗 새로운 영상 URL: {public_url}")
+    print("⏳ 60초 대기 (인스타 서버가 새 영상을 안정적으로 가져가도록 시간 확보)...")
+    time.sleep(60)
 
+    # 5. 인스타그램 포스팅
     if post_to_instagram(public_url, final_caption):
-        print("✅ 업로드 성공!")
-        if is_emergency: update_emergency_scripts(selected_topic, script)
+        print("🎉 인스타그램 업로드 성공!")
+        
+        # 6. 업로드 성공 후 깃허브에서 영상 삭제 (정리 로직 호출)
+        delete_from_gh_pages(final_video_name)
+        
+        if is_emergency: 
+            update_emergency_scripts(selected_topic, script)
         else:
             update_topics_list(selected_topic)
             update_emergency_scripts(selected_topic)
-
-def delete_from_gh_pages(file_name):
-    if not GITHUB_TOKEN: return
-    try:
-        workdir = "/tmp/ghpages_cleanup"
-        repo_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{GITHUB_ID}/{REPO_NAME}.git"
-        
-        subprocess.run(["rm", "-rf", workdir], check=False)
-        subprocess.run(["git", "clone", "--depth", "1", "-b", "gh-pages", repo_url, workdir], check=True)
-        
-        target_path = os.path.join(workdir, file_name)
-        if os.path.exists(target_path):
-            subprocess.run(["git", "rm", file_name], cwd=workdir, check=True)
-            subprocess.run(["git", "config", "user.name", "github-actions[bot]"], cwd=workdir)
-            subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], cwd=workdir)
-            subprocess.run(["git", "commit", "-m", "🗑️ Remove temporary reel video"], cwd=workdir, check=True)
-            subprocess.run(["git", "push", "origin", "gh-pages"], cwd=workdir, check=True)
-            print(f"🗑️ 깃허브에서 {file_name} 삭제 완료!")
-    except Exception as e:
-        print(f"❌ 삭제 작업 중 오류 발생: {e}")
-
-if __name__ == "__main__":
-    run_reels_bot()
+    else:
+        print("⚠️ 인스타그램 업로드 실패.")
