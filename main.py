@@ -104,7 +104,19 @@ def update_emergency_scripts(current_topic=None, used_script=None):
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     
     topic_str = f"based on the topic '{current_topic}'" if current_topic else "about dark psychology and wealth"
-    prompt = f"Generate 10 powerful, viral 20-word scripts for Instagram Reels {topic_str}. One per line. No numbers, no quotes."
+    prompt_content = f"""
+    Topic: {selected_topic}
+    Role: You are a viral content creator specializing in Dark Psychology and Wealth Mindset that knows secret which only rich people knows.
+    Objective: Create a script for a viral Instagram Reel. (can be a bullet point style. like, top 5 things only rich knows...). After seeing this they must feel like they must buy the thing in my bio.
+    
+    Guidelines:
+    - Use the "Pattern Interrupt" technique: Start with a shocking truth or a counter-intuitive statement.
+    - Focus on high-status, dark psychology, or "the hidden secrets of the 1%".
+    - Tone: Cold, authoritative, and mysterious. Avoid clichés like "believe in yourself" or "work hard".
+    - Structure: A powerful statement that makes the viewer feel they are missing out or being lied to.
+    
+    Provide ONLY the script. No quotes, no intro.
+    """
 
     for model in AI_MODELS:
         try:
