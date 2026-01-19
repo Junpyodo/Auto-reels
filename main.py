@@ -89,6 +89,9 @@ def safe_extract_text_from_openai_response(resp):
 
 # -------------- AI 관련 (기존과 동일) --------------
 def update_emergency_scripts(current_topic=None, used_script=None):
+    def normalize(text):
+        return re.sub(r'[^a-zA-Z0-9]', '', text).lower()
+        
     scripts = get_list_from_file(EMERGENCY_FILE, ["Work in silence.", "Success is the best revenge."])
     
     if used_script:
@@ -180,15 +183,14 @@ def update_topics_list(used_topic):
     print("⚠️ 모든 모델 실패 — 주제 리스트 변경 안됨")
 
 def get_best_sales_script(selected_topic, max_attempts_per_model=2):
+    def normalize(text):
+        return re.sub(r'[^a-zA-Z0-9]', '', text).lower()
     if not OPENROUTER_API_KEY:
         e_scripts = get_list_from_file(EMERGENCY_FILE, ["The 1% don't sleep until the job is done."])
         return random.choice(e_scripts), True
 
     used_scripts = load_json(USED_SCRIPTS_FILE, [])
     
-    def normalize(text):
-        return re.sub(r'[^a-zA-Z0-9]', '', text).lower()
-
     normalized_used_scripts = [normalize(s) for s in used_scripts]
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     
