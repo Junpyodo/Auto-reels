@@ -68,28 +68,58 @@ def safe_extract_text_from_openai_response(resp):
 # -------------- AI 관련 --------------
 def get_best_sales_script(selected_topic, max_attempts_per_model=2):
     def normalize(text): return re.sub(r'[^a-zA-Z0-9]', '', text).lower()
+    
     used_scripts = load_json(USED_SCRIPTS_FILE, [])
     normalized_used_scripts = [normalize(s) for s in used_scripts]
+
+    # 1. AI 시도 (기존 로직 동일)
+    if OPENROUTER_API_KEY:
+        client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
+        prompt_content = f"Topic: {selected_topic}. Write one viral dark psychology quote. No quotes."
+
+        for model in AI_MODELS:
+            for attempt in range(max_attempts_per_model):
+                try:
+                    time.sleep(1.5)
+                    resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt_content}], temperature=0.9)
+                    script = safe_extract_text_from_openai_response(resp).split('\n')[0].strip().replace('"', '')
+                    
+                    if normalize(script) not in normalized_used_scripts and len(script) > 10:
+                        used_scripts.append(script)
+                        save_json(USED_SCRIPTS_FILE, used_scripts)
+                        print(f"✨ AI 성공: {script}")
+                        return script, False
+                except: continue
+
+    # 2. AI 실패 시: 무조건 파일에서만 가져오기
+    print(f"🆘 AI 실패. {EMERGENCY_FILE} 파일에서만 대본을 가져옵니다.")
     
-    if not OPENROUTER_API_KEY:
-        e_scripts = get_list_from_file(EMERGENCY_FILE, ["The 1% don't sleep."])
-        return random.choice(e_scripts), True
+    # 파일에서 리스트 읽기 (기본값 제거)
+    if not os.path.exists(EMERGENCY_FILE):
+        print(f"❌ 에러: {EMERGENCY_FILE} 파일이 없습니다!")
+        return "Focus on your goal.", True # 최소한의 방어 코드
 
-    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
-    prompt_content = f"Topic: {selected_topic}. Create a viral Reels script about dark psychology/wealth. No quotes."
+    with open(EMERGENCY_FILE, "r", encoding="utf-8") as f:
+        fallback_pool = [line.strip() for line in f.readlines() if line.strip()]
 
-    for model in AI_MODELS:
-        for attempt in range(max_attempts_per_model):
-            try:
-                time.sleep(1.2)
-                resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt_content}], temperature=0.95)
-                script = safe_extract_text_from_openai_response(resp).split('\n')[0].strip().replace('"', '')
-                if normalize(script) not in normalized_used_scripts and len(script) > 10:
-                    used_scripts.append(script)
-                    save_json(USED_SCRIPTS_FILE, used_scripts)
-                    return script, False
-            except: continue
-    return "Privacy is power.", True
+    if not fallback_pool:
+        print(f"❌ 에러: {EMERGENCY_FILE} 파일이 비어있습니다!")
+        return "Build in silence.", True
+
+    # 안 쓴 문구 필터링
+    fresh_fallbacks = [s for s in fallback_pool if normalize(s) not in normalized_used_scripts]
+    
+    if fresh_fallbacks:
+        chosen = random.choice(fresh_fallbacks)
+        print(f"📢 파일에서 미사용 대본 선택 완료: {chosen}")
+    else:
+        # 파일에 있는 것도 다 썼을 때 (중복 허용하되 번호 붙임)
+        print("⚠️ 파일의 모든 대본을 소진했습니다. 랜덤 선택 후 번호를 붙입니다.")
+        chosen = f"{random.choice(fallback_pool)} ..{int(time.time()) % 100}"
+
+    used_scripts.append(chosen)
+    save_json(USED_SCRIPTS_FILE, used_scripts)
+    return chosen, True
 
 # -------------- 업로드 및 삭제 로직 --------------
 def gh_pages_publish(file_path):
