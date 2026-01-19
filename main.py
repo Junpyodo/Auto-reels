@@ -216,8 +216,8 @@ def run_reels_bot():
     public_url = gh_pages_publish(final_video_name)
     if not public_url: return
 
-    print(f"⏳ 60초 대기... URL: {public_url}")
-    time.sleep(60)
+    print(f"⏳ 120초 대기... URL: {public_url}")
+    time.sleep(120)
 
     # 5. 인스타 포스팅
     if post_to_instagram(public_url, final_caption):
