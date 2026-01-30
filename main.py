@@ -99,10 +99,10 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
                         used_scripts.append(script)
                         save_json(USED_SCRIPTS_FILE, used_scripts)
 
-                        # [핵심] 성공했으니 추가로 3개 더 만들어서 비상 파일에 저축
+                        # [핵심] 성공했으니 추가로 10개 더 만들어서 비상 파일에 저축
                         try:
                             print("📦 미래를 위해 비상 대본을 비축합니다...")
-                            backup_prompt = f"Write 3 more different viral sentences about {selected_topic} in the same mysterious style. No quotes."
+                            backup_prompt = f"Write 10 more different viral sentences about {selected_topic} in the same mysterious style. No quotes."
                             backup_resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":backup_prompt}], temperature=1.0)
                             backups = safe_extract_text_from_openai_response(backup_resp).split('\n')
                             
