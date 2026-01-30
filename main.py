@@ -78,8 +78,8 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
         # 10개를 한꺼번에 요청하도록 프롬프트 수정
         prompt_content = (
             f"Act as a viral content creator specializing in dark psychology and wealth. "
-            f"Topic: {selected_topic}. Task: Write 10 different viral sentences for short reels. "
-            f"Task: Write one bone-chilling, highly relatable, and viral sentence for a short reel. They viewers must feel they now able to know the secret that only rich people knew by buying the thing in my bio. "
+            f"Topic: {selected_topic}."
+            f"Task: Write 10 bone-chilling, highly relatable, and viral sentences for a short reel. They viewers must feel they now able to know the secret that only rich people knew by buying the thing in my bio. "
             f"Guidelines: (Around 20 words) Use a 'Hook-driven' structure. Make it sound cold, mysterious, and superior. Focus on human manipulation, hidden power, secret that only rich people know, and secret wealth habits. Must be around 20 words. Don't use *, "", '', hashtags, generic advice, or numbers "
 
         )
