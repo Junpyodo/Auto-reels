@@ -1,1 +1,263 @@
+import os
+import random
+import time
+import json
+import traceback
+import requests
+import subprocess
+import re
+from openai import OpenAI
+from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip, AudioFileClip
+import moviepy.video.fx.all as vfx
 
+# --- 설정 ---
+GITHUB_ID = "Junpyodo"
+REPO_NAME = "Auto-reels"
+TOPIC_FILE = "topics.txt"
+EMERGENCY_FILE = "emergency_scripts.txt"
+USED_SCRIPTS_FILE = "used_scripts.json"
+
+ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
+ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+
+HASHTAGS = "#wealth #success #darkpsychology #motivation #millionaire #mindset"
+MENTIONS = "@instagram"
+
+AI_MODELS = [
+    "google/gemini-2.0-flash-exp:free",
+    "google/gemini-flash-1.5-8b:free",
+    "openai/gpt-4o-mini-2024-07-18:free",
+    "meta-llama/llama-3.1-8b-instruct:free"
+]
+
+# -------------- 유틸 --------------
+def get_list_from_file(file_path, default_values):
+    if not os.path.exists(file_path):
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(default_values))
+        return default_values[:]
+    with open(file_path, "r", encoding="utf-8") as f:
+        return [line.strip() for line in f.readlines() if line.strip()]
+
+def save_list_to_file(file_path, items):
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(items))
+
+def load_json(path, default):
+    if not os.path.exists(path):
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(default, f, ensure_ascii=False, indent=2)
+        return default
+    with open(path, "r", encoding="utf-8") as f:
+        try: return json.load(f)
+        except Exception: return default
+
+def save_json(path, obj):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+
+def safe_extract_text_from_openai_response(resp):
+    try:
+        if hasattr(resp, "choices") and len(resp.choices) > 0:
+            return resp.choices[0].message.content.strip()
+    except: pass
+    return ""
+
+# -------------- AI 관련 --------------
+def get_best_sales_script(selected_topic, max_attempts_per_model=2):
+    def normalize(text): return re.sub(r'[^a-zA-Z0-9]', '', text).lower()
+    
+    used_scripts = load_json(USED_SCRIPTS_FILE, [])
+    normalized_used_scripts = [normalize(s) for s in used_scripts]
+
+    # 1. AI 시도 (여기서 대본을 10개 미리 만들어서 비상 파일에 저축만 함)
+    if OPENROUTER_API_KEY:
+        client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
+        # 10개를 한꺼번에 요청하도록 프롬프트 수정
+        prompt_content = (
+            f"Act as a viral content creator specializing in dark psychology and wealth. "
+            f"Topic: {selected_topic}. Task: Write 10 different viral sentences for short reels. "
+            f"Task: Write one bone-chilling, highly relatable, and viral sentence for a short reel. They viewers must feel they now able to know the secret that only rich people knew by buying the thing in my bio. "
+            f"Guidelines: (Around 20 words) Use a 'Hook-driven' structure. Make it sound cold, mysterious, and superior. Focus on human manipulation, hidden power, secret that only rich people know, and secret wealth habits. Must be around 20 words. Don't use *, "", '', hashtags, generic advice, or numbers "
+
+        )
+
+        for model in AI_MODELS:
+            for attempt in range(max_attempts_per_model):
+                try:
+                    time.sleep(1.5)
+                    resp = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt_content}], temperature=1.0)
+                    new_batch = safe_extract_text_from_openai_response(resp).split('\n')
+                    
+                    # 새로운 대본들 중 유효한 것만 골라내기
+                    valid_new_scripts = []
+                    existing_emergencies = [normalize(line) for line in get_list_from_file(EMERGENCY_FILE, [])]
+                    
+                    for s in new_batch:
+                        s = s.strip().replace('"', '')
+                        if s and normalize(s) not in normalized_used_scripts and normalize(s) not in existing_emergencies and len(s) > 10:
+                            valid_new_scripts.append(s)
+
+                    if valid_new_scripts:
+                        # 비상 파일에 10개(또는 생성된 만큼) 저장
+                        with open(EMERGENCY_FILE, "a", encoding="utf-8") as f:
+                            for s in valid_new_scripts:
+                                f.write(s + "\n")
+                        print(f"✨ AI가 {len(valid_new_scripts)}개의 새로운 대본을 비상 리스트에 추가했습니다.")
+                        # AI 성공 시 루프 탈출 (다음 단계인 파일 선택으로 이동)
+                        break 
+                    else: continue
+                except: continue
+            else: continue
+            break
+
+    # 2. 대본 선택 로직 (AI가 성공했든 실패했든, 최종 결과는 여기서 파일 기반으로 결정)
+    print(f"📂 {EMERGENCY_FILE} 파일에서 오늘의 대본을 선택합니다.")
+    
+    if not os.path.exists(EMERGENCY_FILE):
+        return "Focus on your goal.", True
+
+    with open(EMERGENCY_FILE, "r", encoding="utf-8") as f:
+        fallback_pool = [line.strip() for line in f.readlines() if line.strip()]
+
+    if not fallback_pool:
+        return "Build in silence.", True
+
+    # 안 쓴 문구 필터링
+    fresh_fallbacks = [s for s in fallback_pool if normalize(s) not in normalized_used_scripts]
+    
+    if fresh_fallbacks:
+        chosen = random.choice(fresh_fallbacks)
+        print(f"📢 선택된 대본: {chosen}")
+        is_emergency = False # 파일에서 정상적으로 가져옴
+    else:
+        print("⚠️ 모든 대본 소진. 중복 허용 및 번호 추가.")
+        chosen = f"{random.choice(fallback_pool)} ..{int(time.time()) % 100}"
+        is_emergency = True
+
+    # 최종 선택 기록 저장
+    used_scripts.append(chosen)
+    save_json(USED_SCRIPTS_FILE, used_scripts)
+    return chosen, is_emergency
+# -------------- 업로드 및 삭제 로직 --------------
+def gh_pages_publish(file_path):
+    if not GITHUB_TOKEN: return None
+    try:
+        dest_name = os.path.basename(file_path)
+        repo_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{GITHUB_ID}/{REPO_NAME}.git"
+        workdir = "/tmp/auto-reels-ghpages"
+        subprocess.run(["rm", "-rf", workdir], check=False)
+        subprocess.run(["git", "clone", repo_url, workdir], check=True)
+        subprocess.run(["git", "config", "user.name", "github-actions[bot]"], cwd=workdir)
+        subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], cwd=workdir)
+        
+        # gh-pages 브랜치 체크아웃
+        ret = subprocess.run(["git", "checkout", "gh-pages"], cwd=workdir, capture_output=True)
+        if ret.returncode != 0:
+            subprocess.run(["git", "checkout", "--orphan", "gh-pages"], cwd=workdir, check=True)
+            subprocess.run(["git", "rm", "-rf", "."], cwd=workdir, check=True)
+
+        dest = os.path.join(workdir, dest_name)
+        subprocess.run(["cp", file_path, dest], check=True)
+        subprocess.run(["git", "add", "."], cwd=workdir, check=True)
+        subprocess.run(["git", "commit", "-m", f"🚀 Upload {dest_name}"], cwd=workdir, check=True)
+        subprocess.run(["git", "push", "origin", "gh-pages"], cwd=workdir, check=True)
+        
+        return f"https://{GITHUB_ID}.github.io/{REPO_NAME}/{dest_name}"
+    except Exception as e:
+        print("❌ gh-pages 업로드 실패:", e)
+        return None
+
+def delete_from_gh_pages(file_name):
+    try:
+        workdir = "/tmp/ghpages_del"
+        repo_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{GITHUB_ID}/{REPO_NAME}.git"
+        subprocess.run(["rm", "-rf", workdir], check=False)
+        subprocess.run(["git", "clone", "--depth", "1", "-b", "gh-pages", repo_url, workdir], check=True)
+        if os.path.exists(os.path.join(workdir, file_name)):
+            subprocess.run(["git", "rm", file_name], cwd=workdir)
+            subprocess.run(["git", "config", "user.name", "github-actions[bot]"], cwd=workdir)
+            subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], cwd=workdir)
+            subprocess.run(["git", "commit", "-m", "🗑️ Cleanup"], cwd=workdir)
+            subprocess.run(["git", "push", "origin", "gh-pages"], cwd=workdir)
+            print(f"🗑️ {file_name} 삭제 완료")
+    except: pass
+
+# -------------- Instagram 업로드 --------------
+def post_to_instagram(video_url, caption):
+    ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
+    ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID")
+    if not ACCESS_TOKEN or not ACCOUNT_ID: return False
+    
+    url = f"https://graph.facebook.com/v19.0/{ACCOUNT_ID}/media"
+    payload = {'media_type': 'REELS', 'video_url': video_url, 'caption': caption, 'share_to_feed': 'true', 'access_token': ACCESS_TOKEN}
+    
+    try:
+        r = requests.post(url, data=payload, timeout=30).json()
+        if "id" not in r: return False
+        c_id = r.get("id")
+        for i in range(25):
+            time.sleep(10)
+            status = requests.get(f"https://graph.facebook.com/v19.0/{c_id}", params={'fields': 'status_code', 'access_token': ACCESS_TOKEN}).json()
+            code = status.get("status_code", "").upper()
+            print(f"   - 상태 확인 ({i+1}/25): {code}")
+            if code == "FINISHED":
+                res = requests.post(f"https://graph.facebook.com/v19.0/{ACCOUNT_ID}/media_publish", data={'creation_id': c_id, 'access_token': ACCESS_TOKEN}).json()
+                return "id" in res
+            elif code == "ERROR": return False
+    except: return False
+    return False
+
+# -------------- 메인 흐름 --------------
+def run_reels_bot():
+    if not os.path.exists("background.mp4"): return
+
+    used_scripts = load_json(USED_SCRIPTS_FILE, [])
+    current_idx = len(used_scripts) + 1
+    timestamp = int(time.time())
+    # [수정] 일련번호와 고유숫자를 결합한 파일명
+    final_video_name = f"reels_{current_idx}_{timestamp}.mp4"
+
+    topics = get_list_from_file(TOPIC_FILE, ["Dark psychology"])
+    selected_topic = random.choice(topics)
+    script, is_emergency = get_best_sales_script(selected_topic)
+    final_caption = f"{script}\n\n{MENTIONS}\n\n{HASHTAGS}"
+
+    try:
+        print(f"🎬 {current_idx}번째 영상 제작 중...")
+        video = VideoFileClip("background.mp4").subclip(0,8).fx(vfx.colorx, 0.25)
+        txt = TextClip(script, fontsize=45, color='white', size=(int(video.w*0.85), None),
+                       font='DejaVu-Sans-Bold', method='caption', align='center',
+                       interline=12, stroke_color='black', stroke_width=1.5).set_duration(8).set_pos('center')
+        final = CompositeVideoClip([video, txt])
+        
+        audio_success = False
+        if os.path.exists("music.mp3"):
+            try:
+                music = AudioFileClip("music.mp3").subclip(0, 8) 
+                final = final.set_audio(music)
+                audio_success = True
+            except: pass
+
+        final.write_videofile(final_video_name, fps=24, codec="libx264", audio=audio_success, audio_codec="aac")
+    except Exception as e:
+        print("❌ 제작 오류:", e); return
+
+    # 업로드
+    public_url = gh_pages_publish(final_video_name)
+    if not public_url: return
+
+    print(f"⏳ 배포 안정화 대기 (120초)... {public_url}")
+    time.sleep(120)
+
+    # 포스팅 및 성공 시 삭제
+    if post_to_instagram(public_url, final_caption):
+        print("✅ 성공! 깃허브 파일을 삭제합니다.")
+        delete_from_gh_pages(final_video_name)
+    else:
+        print("⚠️ 업로드 실패")
+
+if __name__ == "__main__":
+    run_reels_bot()
