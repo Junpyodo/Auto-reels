@@ -78,13 +78,13 @@ def get_best_sales_script(selected_topic, max_attempts_per_model=2):
         prompt_content = (
     f"Act as a viral content creator specializing in dark psychology and wealth. "
     f"Topic: {selected_topic}. "
-    f"Task: Write one bone-chilling, highly relatable, and viral sentence for a short reel. They viewers must feel they now able to know the secret that only rich people knew. (by buying the thing in my bio) "
+    f"Task: Write one bone-chilling, highly relatable, and viral sentence for a short reel. They viewers must feel they now able to know the secret that only rich people knew by buying the thing in my bio. "
     f"Guidelines: "
     f"1. Use a 'Hook-driven' structure. "
     f"2. Focus on human manipulation, hidden power, or secret wealth habits. "
-    f"3. Must be around 20 words. "
+    f"3. Must be around 20 words. Don't use *, "", '', or numbers "
     f"4. Do not use hashtags, do not use quotation marks, and do not use generic advice. "
-    f"5. Make it sound cold, mysterious, and superior."
+    f"5. Make it sound cold, mysterious, and superior." 
         )
 
         for model in AI_MODELS:
