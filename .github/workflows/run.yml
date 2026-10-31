@@ -2,7 +2,7 @@ name: Auto Reels Uploader
 
 on:
   workflow_dispatch:
-  schedule:
+  sche(이거지우면 다시 됨)dule:
     # 하루에 두 번 실행 (한국 시간 12:00 PM, 12:00 AM)
     - cron: '0 3,15 * * *' 
 
